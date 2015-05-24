@@ -1,0 +1,21 @@
+[
+ { "type"    : "DataTile",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "encoding"     , "type" : "uint8"  },
+    { "name" : "aggregation"  , "type" : "uint8"  },
+    { "name" : "epoc"         , "type" : "int64"  },
+    { "name" : "startTime"    , "type" : "uint64" },
+    { "name" : "timeFactor"   , "type" : "int8"   },
+    { "name" : "duration"     , "type" : "uint64" },
+    { "name" : "units"        , "type" : "utf8"   },
+    { "name" : "baseValue"    , "type" : "int64"  },
+    { "name" : "valueFactor"  , "type" : "int8"   },
+    { "name" : "values"       , "type" : "int64"  , "repeated" : true  },
+    { "name" : "samples"      , "type" : "uint64" , "repeated" : true  },
+    { "name" : "varianceType" , "type" : "utf8"   },
+    { "name" : "variance1"    , "type" : "int64"  , "repeated" : true  },
+    { "name" : "variance2"    , "type" : "int64"  , "repeated" : true  },
+    { "name" : "times"        , "type" : "uint64" , "repeated" : true  }
+  ] }
+]

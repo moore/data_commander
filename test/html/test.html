@@ -2,11 +2,23 @@
   <head>
     <script src="./dc.js"></script>
     <script>
-      console.log(two_times( 7 ));
-      
-      var inData = new ArrayBuffer(100);
+      function _base64ToArrayBuffer(base64) {
+          var binary_string =  window.atob(base64);
+          var len = binary_string.length;
+          var bytes = new Uint8Array( len );
+          for (var i = 0; i < len; i++) {
+             bytes[i] = binary_string.charCodeAt(i);
+	  }
+          return bytes.buffer;
+      }
+
+      var TEST_DATA = "AAAAAA4AAAAAAAAABQAHAAAAAAD9AAAAsgcAAAAAAAAAAAAAAAAAAMAnCQAAAAAAAAAAAAAAAAAZAAAAKgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE1icHMAAAAA";
+
+      var inData = _base64ToArrayBuffer( TEST_DATA );
+
+
       var buffer = loadBuffer( inData );
-      var iterator = initIterator();
+      var iterator = initIterator( buffer );
       var result = nextValue( initIterator );
       finishIterator( initIterator );
       freeBuffer( buffer );

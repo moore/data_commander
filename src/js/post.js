@@ -1,5 +1,3 @@
-two_times = Module.cwrap('two_times')
-
 function loadBuffer ( arrayBuffer ) {
     var buf = Module._malloc(
 	arrayBuffer.length * arrayBuffer.BYTES_PER_ELEMENT);

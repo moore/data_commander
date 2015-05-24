@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdint.h>
-#include "dc.capnp.h"
+#include <emscripten.h>
+#include "data_tile.h"
 
 typedef struct {
   uint64_t value;
@@ -8,16 +9,20 @@ typedef struct {
 } iterator_t ;
 
 extern "C" {
-  int two_times ( int in ) {
-    return in * 2;
-  }
 
-  iterator_t* initIterator ( ) {
-    return (iterator_t*)malloc(sizeof(iterator_t));
+  iterator_t* initIterator ( DataTile* messageData ) {
+    
+    iterator_t* iterator = (iterator_t*)malloc(sizeof(iterator_t));
+    iterator->time = DataTile_read_startTime( messageData );
+    iterator->value = DataTile_read_baseValue( messageData );
+
+    return iterator;
   }
   
-  bool nextValue (char* message, iterator_t* iterator) {
-    return true;
+  bool nextValue (char* messageData, iterator_t* iterator) {
+    uint64_t time = iterator->time;
+    
+    return time == 0 ? true : false;
   }
 
   void finishIterator (iterator_t* iterator) {
