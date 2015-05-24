@@ -3,6 +3,15 @@
     <script src="./dc.js"></script>
     <script>
       console.log(two_times( 7 ));
+      
+      var inData = new ArrayBuffer(100);
+      var buffer = loadBuffer( inData );
+      var iterator = initIterator();
+      var result = nextValue( initIterator );
+      finishIterator( initIterator );
+      freeBuffer( buffer );
+      console.log("foo", result );
+
     </script>
   </head>
   <body>

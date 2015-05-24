@@ -10,7 +10,7 @@ BUILD_DIR       = build
 BUILD_JS_DIR    = ${BUILD_DIR}/js
 BUILD_CAPNP_DIR = ${BUILD_DIR}/capnp
 
-EMFLAGS = -s EXPORTED_FUNCTIONS="['_two_times']" --post-js $(POST_JS)
+EMFLAGS = -s EXPORTED_FUNCTIONS="['_two_times', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I/usr/local/include/ -I${BUILD_CAPNP_DIR}
 
 .PHONY: all clean distclean 
 all:: js
@@ -24,8 +24,8 @@ ${BUILD_CAPNP_DIR}:
 capnp : ${BUILD_CAPNP_DIR}
 	capnp -I ${CAPNP_DIR} compile -oc++:${BUILD_CAPNP_DIR} --src-prefix=src/capnp/ src/capnp/dc.capnp
 
-js: ${BUILD_JS_DIR}
-	$(EMCC) $(EMFLAGS) $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
+js: ${BUILD_JS_DIR} capnp
+	$(EMCC) $(EMFLAGS)  $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
 
 ${HTDOCS}: js
 	mkdir -p ${HTDOCS}
