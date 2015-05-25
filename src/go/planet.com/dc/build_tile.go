@@ -11,9 +11,12 @@ import (
 )
 
 /*
+#include <stdlib.h>
+#include <stdint.h>
 #include <data_tile.h>
 */
 import "C"
+import "unsafe"
 
 type download struct {
 	time float64
@@ -111,36 +114,44 @@ func parseFile ( dataFile string ) ([]download, []missingChunks, []queueInfo) {
 }
 
 func buildRates (downloads []download) ([]byte) {
-	/*
-	segment := capn.NewBuffer(nil)
-	dataTile := schema.NewRootDataTile(segment)
 	
-	dataTile.SetEncoding( schema.ENCODINGOPTIONS_DISCRETE )
-	dataTile.SetAggregation( schema.AGGREGATIONOPTIONS_NONE )
-	dataTile.SetEpoc( 1970 )
-	dataTile.SetStartTime( 0 )
-	dataTile.SetTimeFactor( -3 )
-	dataTile.SetDuration( 10 * 60 * 1000 )
-	dataTile.SetUnits( "Mbps" )
-	dataTile.SetBaseValue( 0 )
-	dataTile.SetValueFactor( 0 )
-
 	var lastTime uint64 = 0
 	var lastValue int64 = 0
 
-	times := dataTile.Times()
-	values := dataTile.Values()
+	times  := make([]uint64, len(downloads))
+	values := make([]int64 , len(downloads))
 
 	for i, download := range downloads {
 		currentTime := uint64(download.time * 1000)
-		times.Set( i, currentTime - lastTime )
+		times[i] = currentTime - lastTime
 		lastTime = currentTime
 
 		currentValue := int64(download.rate * 1000)
-		values.Set( i, currentValue - lastValue )
+		values[i] = currentValue - lastValue
 		lastValue = currentValue
 	}
-        */
+
+	units := C.CString("Mbps")
+	defer C.free(unsafe.Pointer(units))
+
+	var builder C.struct_DataTile_builder
+
+	builder.prebuilt = false
+	builder.encoding = 0
+	builder.aggregation = 0
+	builder.epoc = 1970
+	builder.startTime = 0
+	builder.timeFactor = -3
+	builder.duration = 10 * 60 * 1000
+	builder.units.data = units
+	builder.units.length = 6 // or should this be 5 leaving off the \0
+	builder.baseValue = 0
+	builder.valueFactor = 0
+	builder.values.data = (*C.int64_t)(unsafe.Pointer(&values[0]))
+	builder.values.count = C.size_t(len(values))
+	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
+	builder.times.count = C.size_t(len(times))
+
 	buf := bytes.Buffer{}
 	//segment.WriteTo(&buf)
 

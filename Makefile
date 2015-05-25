@@ -46,7 +46,7 @@ ${BUILD_BIN_DIR}:
 server : ${HTDOCS}
 	cd ${HTDOCS} && python -m SimpleHTTPServer 8000
 
-buildtile: ${BUILD_BIN_DIR}
+buildtile: ${BUILD_BIN_DIR} ${MESSAGE_HEADDERS}
 	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtile src/go/planet.com/dc/build_tile.go
 
 clean:: 
