@@ -177,7 +177,7 @@ func main() {
 
 	ratesTile, _ := buildRates( downloads )
 	
-	err := ioutil.WriteFile(outFile, ratesTile, 0444)
+	err := ioutil.WriteFile(outFile, ratesTile, 0644)
 
 	if err != nil {
 		panic(err)
