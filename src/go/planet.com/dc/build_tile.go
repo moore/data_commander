@@ -6,8 +6,8 @@ import (
 	"os"
 	"regexp"
 	"strconv"
-	"bytes"
 	"io/ioutil"
+	"errors"
 )
 
 /*
@@ -113,7 +113,7 @@ func parseFile ( dataFile string ) ([]download, []missingChunks, []queueInfo) {
 	return downloads, missing, queues
 }
 
-func buildRates (downloads []download) ([]byte) {
+func buildRates (downloads []download) ([]byte, error) {
 	
 	var lastTime uint64 = 0
 	var lastValue int64 = 0
@@ -151,11 +151,18 @@ func buildRates (downloads []download) ([]byte) {
 	builder.values.count = C.size_t(len(values))
 	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
 	builder.times.count = C.size_t(len(times))
+	
+	size := C.compute_DataTile_length(&builder);
+	result := make([]byte, size);
+	buffer := (*C.char)(unsafe.Pointer(&result[0]))
 
-	buf := bytes.Buffer{}
-	//segment.WriteTo(&buf)
-
-	return buf.Bytes()
+	wrote := C.build_DataTile(buffer, size, &builder)
+	
+	if wrote == 0 {
+		return nil, errors.New("Could not write message.")
+	}
+	
+	return result, nil
 }
 
 func main() {
@@ -168,7 +175,7 @@ func main() {
 	outFile  := os.Args[2]
 	downloads, _, _ := parseFile(dataFile)
 
-	ratesTile := buildRates( downloads )
+	ratesTile, _ := buildRates( downloads )
 	
 	err := ioutil.WriteFile(outFile, ratesTile, 0444)
 
