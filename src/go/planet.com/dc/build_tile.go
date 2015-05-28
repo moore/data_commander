@@ -129,6 +129,7 @@ func buildRates (downloads []download) ([]byte, error) {
 		currentValue := int64(download.rate * 1000)
 		values[i] = currentValue - lastValue
 		lastValue = currentValue
+
 	}
 
 	units := C.CString("Mbps")
@@ -144,13 +145,15 @@ func buildRates (downloads []download) ([]byte, error) {
 	builder.timeFactor = -3
 	builder.duration = 10 * 60 * 1000
 	builder.units.data = units
-	builder.units.length = 6 // or should this be 5 leaving off the \0
+	builder.units.length = 5 //BUG should \0 be included or not
 	builder.baseValue = 0
 	builder.valueFactor = 0
 	builder.values.data = (*C.int64_t)(unsafe.Pointer(&values[0]))
 	builder.values.count = C.size_t(len(values))
 	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
 	builder.times.count = C.size_t(len(times))
+	builder.varianceType.data = units //BUG
+	builder.varianceType.length = 5
 	
 	size := C.compute_DataTile_length(&builder);
 	result := make([]byte, size);
