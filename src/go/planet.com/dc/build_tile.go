@@ -113,27 +113,11 @@ func parseFile ( dataFile string ) ([]download, []missingChunks, []queueInfo) {
 	return downloads, missing, queues
 }
 
-func buildRates (downloads []download) ([]byte, error) {
-	
-	var lastTime uint64 = 0
-	var lastValue int64 = 0
+func makeTile ( times []uint64, values []int64 ) ([]byte, error) {
+	units   := "Mbps"
+	units_c := C.CString(units)
 
-	times  := make([]uint64, len(downloads))
-	values := make([]int64 , len(downloads))
-
-	for i, download := range downloads {
-		currentTime := uint64(download.time * 1000)
-		times[i] = currentTime - lastTime
-		lastTime = currentTime
-
-		currentValue := int64(download.rate * 1000)
-		values[i] = currentValue - lastValue
-		lastValue = currentValue
-
-	}
-
-	units := C.CString("Mbps")
-	defer C.free(unsafe.Pointer(units))
+	defer C.free(unsafe.Pointer(units_c))
 
 	var builder C.struct_DataTile_builder
 
@@ -144,16 +128,14 @@ func buildRates (downloads []download) ([]byte, error) {
 	builder.startTime = 0
 	builder.timeFactor = -3
 	builder.duration = 10 * 60 * 1000
-	builder.units.data = units
-	builder.units.length = 5 //BUG should \0 be included or not
+	builder.units.data = units_c
+	builder.units.length = (C.size_t)(len(units))
 	builder.baseValue = 0
 	builder.valueFactor = 0
 	builder.values.data = (*C.int64_t)(unsafe.Pointer(&values[0]))
 	builder.values.count = C.size_t(len(values))
 	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
 	builder.times.count = C.size_t(len(times))
-	builder.varianceType.data = units //BUG
-	builder.varianceType.length = 5
 	
 	size := C.compute_DataTile_length(&builder);
 	result := make([]byte, size);
@@ -166,6 +148,62 @@ func buildRates (downloads []download) ([]byte, error) {
 	}
 	
 	return result, nil
+
+}
+
+func buildRates (downloads []download) ([]byte, error) {
+	
+	var lastTime uint64 = 0
+	var lastRate int64 = 0
+
+	times     := make([]uint64, len(downloads))
+	rates     := make([]int64 , len(downloads))
+
+	for i, download := range downloads {
+		currentTime := uint64(download.time * 1000)
+		times[i] = currentTime - lastTime
+		lastTime = currentTime
+
+		currentRate := int64(download.rate * 1024)
+		rates[i] = currentRate - lastRate
+		lastRate = currentRate
+
+	}
+
+	return makeTile( times, rates )
+}
+
+
+func buildMissing (missing []missingChunks) ([]byte, error) {
+	
+	var lastTime     uint64 = 0
+	var lastMissing  int64  = 0
+	var totalMissing int64 = 0
+
+	times  := make([]uint64, len(missing))
+	values := make([]int64 , len(missing))
+
+	for i, record := range missing {
+		currentTime := uint64(record.time * 1000)
+		times[i] = currentTime - lastTime
+		lastTime = currentTime
+
+		currentMissing := int64(record.count)
+		totalMissing += currentMissing - lastMissing
+		values[i] = totalMissing
+		lastMissing = currentMissing
+
+	}
+
+	return makeTile( times, values )
+}
+
+func writeTile ( data []byte, path string) {
+	err := ioutil.WriteFile(path, data, 0644)
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func main() {
@@ -176,13 +214,15 @@ func main() {
 
 	dataFile := os.Args[1]
 	outFile  := os.Args[2]
-	downloads, _, _ := parseFile(dataFile)
+	downloads, missing, _ := parseFile(dataFile)
 
 	ratesTile, _ := buildRates( downloads )
-	
-	err := ioutil.WriteFile(outFile, ratesTile, 0644)
+	writeTile( ratesTile, "rates-"+outFile )
 
-	if err != nil {
-		panic(err)
-	}
+	//queueLengths = buildQueueLenghts( queues )
+	//writeTile( queueLengths, "queue-lenghts-"+outFile )
+	
+	missingTile, _ := buildMissing( missing )
+	writeTile( missingTile, "missing-"+outFile )
+
 }

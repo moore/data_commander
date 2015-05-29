@@ -17,7 +17,7 @@ MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS = -s SAFE_HEAP=1 -s EXPORTED_FUNCTIONS="[ '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
 
 .PHONY: all clean distclean 
 all:: js
@@ -28,22 +28,12 @@ ${BUILD_JS_DIR}:
 messages : ${MESSAGE_HEADDERS}
 
 js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS}
-	$(EMCC) -O2 $(EMFLAGS) $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
+	$(EMCC) -Os $(EMFLAGS) $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
 
 ${HTDOCS}: js
 	mkdir -p ${HTDOCS}
 	cp ${BUILD_JS_DIR}/* ${HTDOCS}
 	cp test/html/* ${HTDOCS}
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx1.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx2.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx3.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx4.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx5.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx6.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx7.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx8.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx9.out
-	cp ${HTDOCS}/rx.out ${HTDOCS}/rx10.out
 
 ${MESSAGE_HEADDERS_DIR}:
 	mkdir -p ${MESSAGE_HEADDERS_DIR}

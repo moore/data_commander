@@ -1,13 +1,16 @@
 #include <stdlib.h>
 #include <stdint.h>
+#include <math.h>
 #include <emscripten.h>
 #include "data_tile.h"
 
 typedef struct {
   size_t   count ;
   uint32_t index ;
-  int64_t  value;
+  double   value;
   uint64_t time;
+  double   value_factor;
+  double   time_factor;
 } iterator_t ;
 
 extern "C" {
@@ -19,7 +22,14 @@ extern "C" {
     iterator->index = 0;
     iterator->time  = DataTile_read_startTime( messageData );
     iterator->value = DataTile_read_baseValue( messageData );
-    
+
+    iterator->value_factor = pow(10,
+      DataTile_read_valueFactor( messageData ));
+
+    // Adjust by 3 to prouce Ms when used
+    iterator->time_factor  = pow(10,
+      DataTile_read_timeFactor( messageData ) + 3);
+
     return iterator;
   }
   
@@ -28,11 +38,11 @@ extern "C" {
     if ( iterator->index >= iterator->count )
       return false;
 
-    iterator->time = iterator->time
-      + DataTile_read_times( messageData, iterator->index );
+    iterator->time = iterator->time_factor * (double)(iterator->time
+		      + DataTile_read_times( messageData, iterator->index ));
 
-    iterator->value = iterator->value
-      + DataTile_read_values( messageData, iterator->index );
+    iterator->value = iterator->value_factor * (double)(iterator->value
+		       + DataTile_read_values( messageData, iterator->index ));
     
     iterator->index++;
     return true;

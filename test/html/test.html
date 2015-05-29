@@ -1,9 +1,24 @@
 <html>
   <head>
     <script src="./dc.js"></script>
-    <script src="./test.js"></script>
+    <script src="./dygraph-combined.js"></script>
+    <style>
+      .layout-container {
+        text-align : center;
+        padding-top :2em;
+      }
+      .graph-container {
+        display     :inline-block; 
+      }
+
+    </style>
   </head>
   <body>
-    open the console
+    <div class="layout-container">
+      <div class="graph-container" id="rate-container"></div>
+      <div class="graph-container" id="missing-container"></div>
+    </div>
+
+    <script src="./test.js"></script>
   </body>
 </html>
