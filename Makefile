@@ -33,7 +33,7 @@ js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS}
 ${HTDOCS}: js
 	mkdir -p ${HTDOCS}
 	cp ${BUILD_JS_DIR}/* ${HTDOCS}
-	cp test/html/* ${HTDOCS}
+	cp -r test/html/* ${HTDOCS}
 
 ${MESSAGE_HEADDERS_DIR}:
 	mkdir -p ${MESSAGE_HEADDERS_DIR}
@@ -50,6 +50,7 @@ server : ${HTDOCS}
 
 buildtile: ${BUILD_BIN_DIR} ${MESSAGE_HEADDERS}
 	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtile src/go/planet.com/dc/build_tile.go
+	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildregisters src/go/planet.com/dc/build_register_tile.go
 
 ${CERTS_DIR}:
 	mkdir -p ${CERTS_DIR}

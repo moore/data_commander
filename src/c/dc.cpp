@@ -8,7 +8,7 @@ typedef struct {
   size_t   count ;
   uint32_t index ;
   double   value;
-  uint64_t time;
+  double   time;
   double   value_factor;
   double   time_factor;
 } iterator_t ;
@@ -48,11 +48,11 @@ extern "C" {
     return true;
   }
 
-  int64_t readValue ( iterator_t* iterator ) {
+  double readValue ( iterator_t* iterator ) {
     return iterator->value;
   }
 
-  uint64_t readTime ( iterator_t* iterator ) {
+  double readTime ( iterator_t* iterator ) {
     return iterator->time;
   }
 
