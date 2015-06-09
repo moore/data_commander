@@ -12,14 +12,9 @@
       This is <strong>{{source}}</strong> data of type "<span>{{data}}</span>".
       <div id="container"></div>
     </p>
-    <svg id="chart" width="1000" height="400" style="transform: translateZ(0);">
-      <path id="chart-points"
-	    stroke-linecap="round"
-	    stroke-width="5" 
-	    stroke="blue"
-	    fill="transparent" 
-	    vector-effect="non-scaling-stroke" >
-    </svg>
+  <canvas id="chart" width="1000" height="500"  style="transform: translateZ(0)">
+  </canvas>
+
   </template>
 </dom-module>
 
@@ -48,7 +43,7 @@
     },
     // add a callback to the element's prototype
     ready: function() {
-       loadGraph( this.source, this.data, this.start, this.end );
+       loadGraph( this, this.source, this.data, this.start, this.end );
     }
   });
 </script>

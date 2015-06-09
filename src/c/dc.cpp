@@ -16,7 +16,12 @@ typedef struct {
 extern "C" {
 
   double readStartTime ( DataTile* messageData ) {
-    return DataTile_read_startTime( messageData );
+    // BUG: start time is not the real start time in current tiles!
+    return 
+      pow(10, DataTile_read_valueFactor( messageData )) 
+      * (double)(DataTile_read_times( messageData, 0 ));
+
+    //return DataTile_read_startTime( messageData );
   }
 
   iterator_t* initIterator ( DataTile* messageData ) {

@@ -132,36 +132,63 @@
   <p>
     Transition d.
   </p>
+  <button onClick="do11()">Go!</button>
+  <p>
   <canvas id="canvas" width="1000" height="200"  style="transform: translateZ(0)">
   </canvas>
+  <p>
   <script>
     var canvas = document.getElementById('canvas');
     var ctx = canvas.getContext('2d');
     var width = canvas.width;
     var height= canvas.height;
 
-    var data3 = makeData( 10000 );
-    paintDots( 1 );
+    var dot_canvas = document.createElement('canvas');
+    dot_canvas.width  = 6;
+    dot_canvas.height = 6;
+    var dot_ctx = dot_canvas.getContext("2d");
 
-    function paintDots( scale ) {
+    dot_ctx.moveTo(3,3);
+    dot_ctx.arc(3, 3, 2.5, 0, 2 * Math.PI);
+    dot_ctx.fill();
+
+    var data3 = makeData( 1000000 );
+    paintDots( data3, 1000, 1, 2 );
+
+    function paintDots( data, max, scale, persion ) {
 
       ctx.beginPath();
       ctx.clearRect(0, 0, width, height);
 
-      var dots = reduceData( data3, 1000, scale, 2 );
 
-      for ( var i = 0; i < dots.length ; i++ ) {
-        var record = dots[i];
-	ctx.moveTo(record[1], record[2]);
-        ctx.arc(record[1], record[2], 2.5, 0, 2 * Math.PI);
+      var lastX = undefined;
+      var lastY = undefined;
+      var count = 0;
+
+      for ( var i = 0 ; i < data.length ; i++ ) {
+	    var point = data[i];
+            var x = (point[0] * scale).toFixed(persion);
+            var y = (point[1]).toFixed(persion);
+
+            if ( lastX == x && lastY == y ) {
+               count++;
+               continue;
+            }
+            lastX = x;
+            lastY = y;
+
+            if ( x > max )
+               break;
+
+            ctx.drawImage(dot_canvas, x, y);
+
+            count = 1;
       }
-
-      ctx.fill();
     }
 
     function do11 ( ) {
 
-      var target = 120;
+      var target = 1200;
       var start  = undefined;
     
       requestAnimationFrame( doFrame );
@@ -173,20 +200,19 @@
         else {
           var duration = t - start;
           if ( duration >= 1000 ) {
-             paintDots( target * ( duration/1000 ) );
+             paintDots( data3, 1000, target, 2 );
              return;
           }
 
-          paintDots( target * ( duration/1000 ) );
+          paintDots( data3, 1000, target * ( duration/1000 ), 0 );
         }
 
         requestAnimationFrame( doFrame );
       }       
     }
   </script>
-  <button onClick="do11()">Go!</button>
 
-  <!--
+
   <p>
     Transition d extra fancy.
   </p>
@@ -426,5 +452,5 @@
     }
   </script>
   <button onClick="do3()">Go!</button>
-  -->
+
 </body>
