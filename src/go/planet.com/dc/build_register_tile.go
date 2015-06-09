@@ -93,7 +93,7 @@ func writeTiles ( registers []Register, prefix string ) ( error )  {
 				currnetTileTime = tileTime
 			} else if currnetTileTime != tileTime {
 				// BUG: won't dump last result!
-				tile, _ := makeTile( times[cussrntStart:], values[cussrntStart:], key )
+				tile, _ := makeTile( times[cussrntStart:i], values[cussrntStart:i], key )
 				cussrntStart = i
 
 				path := prefix + key + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"

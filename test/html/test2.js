@@ -29,12 +29,15 @@ function getData ( source, valueType, start, end, handler ) {
     var requestMax = snapBound( end, BucketSize ) + BucketSize ;
 
     getDataWorker( source, valueType, tileStart, handler );
-    getDataWorker( source, valueType, tileStart - BucketSize, handler );
-    
 
-    for ( var i = tileStart ; i < requestMax ; i += BucketSize ) {
-	getDataWorker( source, valueType, i, handler );
-    }
+    // Defer the spicltive work
+    Promise.resolve(true).then( function () {
+	getDataWorker( source, valueType, tileStart - BucketSize, handler );
+    
+	for ( var i = tileStart ; i < requestMax ; i += BucketSize ) {
+	    getDataWorker( source, valueType, i, handler );
+	}
+    });
     
 }
 
@@ -80,7 +83,8 @@ function initGraph ( nodeId, source, valueType ) {
     return graph;
 
     function getMyDate ( startTime, endTime ) {
-	getData( source, valueType, startTime, endTime, handleData );
+	if ( startTime != 0 ) //BUG: wont work for epoc tile
+	    getData( source, valueType, startTime, endTime, handleData );
     }
 
     function handleData ( tile ) {

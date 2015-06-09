@@ -8,6 +8,7 @@ function loadBuffer ( arrayBuffer ) {
     return ptr;
 }
 
+var readStartTime  = Module.cwrap('readStartTime');
 var initIterator   = Module.cwrap('initIterator');
 var _nextValue     = Module.cwrap('nextValue');
 var finishIterator = Module.cwrap('finishIterator');

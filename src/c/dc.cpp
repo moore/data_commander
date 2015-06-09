@@ -15,6 +15,10 @@ typedef struct {
 
 extern "C" {
 
+  double readStartTime ( DataTile* messageData ) {
+    return DataTile_read_startTime( messageData );
+  }
+
   iterator_t* initIterator ( DataTile* messageData ) {
 
     iterator_t* iterator = (iterator_t*)malloc(sizeof(iterator_t));

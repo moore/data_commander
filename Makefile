@@ -1,7 +1,7 @@
 EMCC = emcc
 SOURCES = src/c/dc.cpp
 POST_JS = src/js/post.js
-
+COMPONENTS_SRC = src/components
 
 DIST      = dist
 HTDOCS    = htdocs
@@ -12,12 +12,13 @@ BUILD_JS_DIR  = ${BUILD_DIR}/js
 BUILD_BIN_DIR = ${BUILD_DIR}/bin
 
 
+
 MESSAGE_HEADDERS_DIR = ${BUILD_DIR}/message_headders
 MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readStartTime', '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
 
 .PHONY: all clean distclean 
 all:: js
@@ -32,8 +33,16 @@ js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS}
 
 ${HTDOCS}: js
 	mkdir -p ${HTDOCS}
-	cp ${BUILD_JS_DIR}/* ${HTDOCS}
 	cp -r test/html/* ${HTDOCS}
+	cp ${BUILD_JS_DIR}/* ${HTDOCS}
+	mkdir -p ${HTDOCS}/components
+	cp -r components ${HTDOCS}/
+	cp -r ${COMPONENTS_SRC}/* ${HTDOCS}/components/
+	cp ${BUILD_JS_DIR}/* ${HTDOCS}/components/chart/
+	mkdir -p ${HTDOCS}/data
+	cp ./data/* ${HTDOCS}/data/
+	mkdir -p ${HTDOCS}/libs
+	cp ./libs/js/*.js ${HTDOCS}/libs/
 
 ${MESSAGE_HEADDERS_DIR}:
 	mkdir -p ${MESSAGE_HEADDERS_DIR}

@@ -1,0 +1,430 @@
+<head>
+  <script src="libs/d3.min.js"></script>
+  <script>
+    function makeData ( points, scale ) {
+
+      if ( scale == undefined )
+        scale = 1;
+
+      var data = [];
+
+      var compression =  points/1000;
+
+      for (var i = 1 ; i <= points ; i++) {
+        data.push( [ (i/compression) * scale, Math.log(i) * 10] );
+      }
+ 
+      return data;
+    }
+
+
+    function makePath ( data, len, scale ) {
+	var path = "";
+
+	for ( var i = 0 ; i < data.length ; i++ ) {
+	    var point = data[i];
+	    path += "M";
+	    path += point[0] * scale;
+	    path += ",";
+	    path += point[1];
+	    path += "L";
+	    path += (point[0] + len) * scale;
+	    path += ",";
+	    path += point[1];
+	}
+
+	return path;
+    }
+
+    function makePath2 ( data, max, scale, persion ) {
+	var path = "";
+        var lastX = undefined;
+        var lastY = undefined;
+	for ( var i = 0 ; i < data.length ; i++ ) {
+	    var point = data[i];
+            var x = (point[0] * scale).toFixed(persion);
+            var y = (point[1]).toFixed(persion);
+
+            if ( lastX == x && lastY == y )
+               continue;
+
+            lastX = x;
+            lastY = y;
+
+            if ( x > max )
+               break;
+
+	    path += "M";
+	    path += x;
+	    path += ",";
+	    path += y;
+	    path += "L";
+	    path += x;
+	    path += ",";
+	    path += y;
+	}
+
+	return path;
+    }
+
+    function reduceData ( data, max, scale, persion ) {
+        var results = [];
+        var lastX = undefined;
+        var lastY = undefined;
+        var count = 0;
+        var maxCount = 0;
+
+	for ( var i = 0 ; i < data.length ; i++ ) {
+	    var point = data[i];
+            var x = (point[0] * scale).toFixed(persion);
+            var y = (point[1]).toFixed(persion);
+
+            if ( lastX == x && lastY == y ) {
+               count++;
+               continue;
+            }
+            lastX = x;
+            lastY = y;
+
+            if ( x > max )
+               break;
+
+            results.push( [ i, x, y, count ] );
+
+            if ( count > maxCount )
+              maxCount = count;
+            count = 1;
+	}
+        //console.log( "maxCount", maxCount);
+	return results;
+    }
+
+    var COUNT = 3000;
+    var data = makeData( COUNT );
+  </script>
+</head>
+<body>
+  <p>
+    Transition d.
+  </p>
+  <svg width=1000 heigth=200  style="transform: translateZ(0)">
+    <path id="path1"
+       stroke-linecap="round"
+       stroke-width="5" 
+       stroke="blue"
+       fill="transparent" 
+       vector-effect="non-scaling-stroke" >
+  </svg>
+  <script>
+    var path1 = d3.select("#path1");
+    path1.attr( "d", makePath(data, 0, 1) );
+    function do1 () {
+      path1.transition()
+        .duration( 1000 )
+        .attr("d", makePath(data, 0, 120) )
+      ;
+    }
+  </script>
+  <button onClick="do1()">Go!</button>
+
+
+
+  <p>
+    Transition d.
+  </p>
+  <canvas id="canvas" width="1000" height="200"  style="transform: translateZ(0)">
+  </canvas>
+  <script>
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    var width = canvas.width;
+    var height= canvas.height;
+
+    var data3 = makeData( 10000 );
+    paintDots( 1 );
+
+    function paintDots( scale ) {
+
+      ctx.beginPath();
+      ctx.clearRect(0, 0, width, height);
+
+      var dots = reduceData( data3, 1000, scale, 2 );
+
+      for ( var i = 0; i < dots.length ; i++ ) {
+        var record = dots[i];
+	ctx.moveTo(record[1], record[2]);
+        ctx.arc(record[1], record[2], 2.5, 0, 2 * Math.PI);
+      }
+
+      ctx.fill();
+    }
+
+    function do11 ( ) {
+
+      var target = 120;
+      var start  = undefined;
+    
+      requestAnimationFrame( doFrame );
+
+      function doFrame ( t ) {
+        if ( start == undefined )
+          start = t;
+
+        else {
+          var duration = t - start;
+          if ( duration >= 1000 ) {
+             paintDots( target * ( duration/1000 ) );
+             return;
+          }
+
+          paintDots( target * ( duration/1000 ) );
+        }
+
+        requestAnimationFrame( doFrame );
+      }       
+    }
+  </script>
+  <button onClick="do11()">Go!</button>
+
+  <!--
+  <p>
+    Transition d extra fancy.
+  </p>
+  <svg width=1000 heigth=200  style="transform: translateZ(0)">
+    <path id="path4"
+       stroke-linecap="round"
+       stroke-width="5" 
+       stroke="blue"
+       fill="transparent" 
+       vector-effect="non-scaling-stroke" >
+  </svg>
+  <script>
+    var data2 = makeData( 1000000 );
+    console.log( "data length:", data2.length );
+    var path4 = document.querySelector( "#path4" );
+    path4.setAttribute("d", makePath2(data2, 1000, 1, 2) );
+    function do4 () {
+      var target = 12000;
+      var start  = undefined;
+    
+      requestAnimationFrame( doFrame );
+
+      function doFrame ( t ) {
+        if ( start == undefined )
+          start = t;
+
+        else {
+          var duration = t - start;
+          if ( duration >= 1000 ) {
+             path4.setAttribute("d", makePath2(data2, 1000, target * ( duration/1000 )), 0 );
+             return;
+          }
+
+          path4.setAttribute("d", makePath2(data2, 1000, target * ( duration/1000 )), 0 );
+        }
+
+        requestAnimationFrame( doFrame );
+      }       
+    }
+  </script>
+  <button onClick="do4()">Go!</button>
+
+
+  <p>
+    Fancy Transition Circle.
+  </p>
+  <svg width=1000 heigth=200 style="transform: translateZ(0)">
+    <g id="circle5">
+    </g>
+  </svg>
+  <script>
+    var parent = document.querySelector( "#circle5" );
+    var data3 = makeData( 1000000 );
+    
+    var dots = reduceData( data3, 1000, 1, 2 );
+
+    for ( var i = 0; i < dots.length ; i++ ) {
+      var circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+      var record = dots[i];
+      record.push( circle );
+      parent.appendChild( circle );
+
+      circle.setAttribute( "r", 2.5 );
+      circle.setAttribute( "fill", getColor( record[3] ) );
+      circle.setAttribute( "cx", record[1] );
+      circle.setAttribute( "cy", record[2] );
+    }
+
+    function getColor ( count ) {
+      var blue = 255 - Math.min( count * 10, 255 );
+      var red  = 255 - blue;
+      return "#" + componentToHex(red) + "00" + componentToHex(blue);
+    }
+
+    function componentToHex(c) {
+      var hex = c.toString(16);
+      return hex.length == 1 ? "0" + hex : hex;
+    }
+
+
+    function do5 () {
+      var target = 12000;
+      var start  = undefined;
+    
+      requestAnimationFrame( doFrame );
+
+      function doFrame ( t ) {
+
+        if ( start == undefined )
+          start = t;
+
+        else {
+          var duration = t - start;
+
+          if ( duration >= 1000 ) {
+             dots = updateDots(parent, dots, duration, target, 2 );
+             return;
+          }
+
+          dots = updateDots(parent, dots, duration, target, 0 );
+        }
+
+        requestAnimationFrame( doFrame );
+      }       
+    }
+
+    function updateDots ( parent, current, duration, target, persion ) {
+      var factor  = target * ( duration/1000 )
+      var newDots = reduceData( data3, 1000, factor, persion );
+
+      var i = 0;
+      var j = 0;
+
+      while ( i < current.length && j < newDots.length ) {
+        var oldRecord = current[i];
+        var newRecord = newDots[j];
+
+        if ( oldRecord[0] == newRecord[0] ) {
+          var circle = oldRecord[4];
+
+          if ( circle == undefined )
+            console.log( "oldRecord, newRecord", oldRecord, newRecord, current, newDots); //BOOG
+
+          newRecord.push( circle );
+
+          if ( circle.getAttribute( "cx" ) != newRecord[1] )
+            circle.setAttribute( "cx", newRecord[1] );
+
+          if ( circle.getAttribute( "cy" ) != newRecord[2] )
+            circle.setAttribute( "cy", newRecord[2] );
+
+
+          if ( circle.getAttribute( "fill" ) != newRecord[3] )
+            circle.setAttribute( "fill", getColor( newRecord[3] ) );
+
+          i++;
+          j++;
+        }
+
+        else if ( oldRecord[0] > newRecord[0] ) {
+          var circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+
+         newRecord.push( circle );
+         parent.insertBefore(circle, newDots[j-1][4].nextSibling);
+
+         circle.setAttribute( "r", 2.5 );
+         circle.setAttribute( "fill", getColor( newRecord[3] ) );
+         circle.setAttribute( "cx", newRecord[1] );
+         circle.setAttribute( "cy", newRecord[2] );
+
+         j++;
+        }
+        
+        else {
+          parent.removeChild( oldRecord[4] );
+          i++;
+        }
+      }
+
+      for ( ; i < current.length ; i++ ) {
+        parent.removeChild( current[i][4] );
+      }
+
+      for ( ; j < newDots.length ; j++ ) {
+        var circle = document.createElementNS("http://www.w3.org/2000/svg","circle");
+        var record = newDots[j];
+        record.push( circle );
+        parent.appendChild( circle );
+
+        circle.setAttribute( "r", 2.5 );
+        circle.setAttribute( "fill", getColor( record[3] ) );
+        circle.setAttribute( "cx", record[1] );
+        circle.setAttribute( "cy", record[2] );
+      }
+
+      return newDots;
+    }
+
+  </script>
+  <button onClick="do5()">Go!</button>
+
+  <p>
+    Transition scale().
+  </p>
+  <svg width=1000 heigth=200 style="transform: translateZ(0)">
+    <path id="path2"
+       stroke-linecap="round"
+       stroke-width="5" 
+       stroke="blue"
+       fill="transparent"
+       transform="scale(1)"
+       vector-effect="non-scaling-stroke" >
+  </svg>
+  <script>
+    var path2 = d3.select("#path2");
+    path2.attr( "d", makePath(data, 0.001, 1) );
+    function do2 () {
+      path2.transition()
+        .duration( 1000 )
+        .attr("transform", "scale(120,1)" )
+      ;
+    }
+  </script>
+  <button onClick="do2()">Go!</button>
+
+
+  <p>
+    Transition Circle.
+  </p>
+  <svg width=1000 heigth=200 style="transform: translateZ(0)">
+    <g id="circle3">
+    </g>
+  </svg>
+  <script>
+    var dots3 = d3.select( "#circle3").selectAll("circle");
+    dots3.data( data )
+    .enter().append("circle")
+    .attr( "fill", "blue" )
+    .attr( "r", 2.5 )
+    .attr( "cx", function (d) { return d[0] } )
+    .attr( "cy", function (d) { return d[1] } )
+    ;
+
+    function do3 () {
+      var dots3 = d3.select( "#circle3").selectAll("circle");
+      var newData = makeData( COUNT, 120 );
+
+      var update = dots3.data(newData);
+    
+      update
+        .transition()
+        .duration( 1000 )
+        .attr( "cx", function (d) { return d[0] } )
+        .attr( "cy", function (d) { return d[1] } )
+      ;
+
+    }
+  </script>
+  <button onClick="do3()">Go!</button>
+  -->
+</body>

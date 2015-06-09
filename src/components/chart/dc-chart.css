@@ -1,0 +1,10 @@
+
+/*set the axis line color, dot stroke, font size, and font position*/
+body {
+  font: 15px sans-serif;
+}
+
+#chart {
+    transform: translateZ(0);
+}
+
