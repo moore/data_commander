@@ -84,7 +84,7 @@ function getDataWorker ( source, valueType, tileStart, handler ) {
 var Viz = new function ( ) {
     return constructor;
 
-    function constructor ( root, title, units, start, end ) {
+    function constructor ( root, start, end ) {
 	var canvas  = root.querySelector( "#chart" );
 	var gl = canvas.getContext("webgl");
 
@@ -127,8 +127,6 @@ var Viz = new function ( ) {
 	var fAccurecy = 0;
 	var fValueMin = -1500;
 	var fValueMax = 1500;
-	var fNewData = [];
-	var fPlotSchulded = false;
 	var fYZoom = 1.0;
 	var fMaxPoints   = Math.pow(10, 6);
 	var fPointsCount = 0;
@@ -178,26 +176,17 @@ var Viz = new function ( ) {
 	function updateGraph ( data ) {
 	    var buffer = loadBuffer( data );
 	    addData( buffer );
-	    
-	    fNewData.push( buffer );
-	    if ( fPlotSchulded === false ) {
-		fPlotSchulded = true;
-		requestAnimationFrame(function () {
-
-		    var results = 
-			plotPoints(fNewData, fGl, fBuffers, fGlVars, fX, fY, fAccurecy,
-				   fMaxPoints, fPointsCount, fDataArray, fStart, fEnd,
-				  fValueMin, fValueMax);
+	    	
+	    var results = 
+		plotPoints([buffer], fGl, fBuffers, fGlVars, fX, fY, fAccurecy,
+			   fMaxPoints, fPointsCount, fDataArray, fStart, fEnd,
+			   fValueMin, fValueMax);
 		
-		    fDataArray   = results.data;
-		    fPointsCount = results.pointsCount;
-		    fValueMin    = results.minY;
-		    fValueMax    = results.maxY;
-		    fNewData = [];
-		    fPlotSchulded = false;
-		    schudleDraw();
-		});
-	    }
+	    fDataArray   = results.data;
+	    fPointsCount = results.pointsCount;
+	    fValueMin    = results.minY;
+	    fValueMax    = results.maxY;
+	    schudleDraw();
 	}
 
 	function schudleDraw ( ) {
@@ -296,9 +285,6 @@ var Viz = new function ( ) {
 
 	gl.bindBuffer(gl.ARRAY_BUFFER, buffers.points);
 	gl.bufferData(gl.ARRAY_BUFFER, fDataArray, gl.STATIC_DRAW);
-
-	console.log( "new points %s, added %s total %d", 
-		     totalPoints, usedPoints, fPointsCount); //BOOG 
 
 	return {minY:minValue, maxY:maxValue, pointsCount: fPointsCount, 
 		data:fDataArray };
@@ -549,7 +535,7 @@ function loadGraph ( root, source, type, startDate, endDate ) {
     var endTime   = endDate.getTime();
     
 
-    var viz = Viz( root, source, type, startTime, endTime );
+    var viz = Viz( root, startTime, endTime );
 
     getMyData( startTime, endTime );
 
