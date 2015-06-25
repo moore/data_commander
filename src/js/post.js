@@ -10,18 +10,12 @@ function loadBuffer ( arrayBuffer ) {
 
 var readStartTime  = Module.cwrap('readStartTime');
 var initIterator   = Module.cwrap('initIterator');
-var _nextValue     = Module.cwrap('nextValue');
+var nextValue      = Module.cwrap('nextValue');
 var finishIterator = Module.cwrap('finishIterator');
 var readValue      = Module.cwrap('readValue');
 var readTime       = Module.cwrap('readTime');
+var readVariance1  = Module.cwrap('readVariance1');
 
-function nextValue ( iterator, buffer, result ) {
-    var error = _nextValue( buffer, iterator );
-    result.value = readValue( iterator );
-    result.time  = readTime( iterator );
-
-    return error == 0 ? false : true ;
-}
 
 function freeBuffer ( buf ) {
     Module._free(buf);

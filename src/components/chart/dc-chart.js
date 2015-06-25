@@ -3,6 +3,46 @@
 var BUCKET_SIZE = 24 * 60 * 60 * 1000;
 var requestedTimes = {};
 
+// register a new element called proto-element
+Polymer({
+    is: "dc-chart",
+    properties: {
+	source: {
+            type : String,
+            value: ""
+	},
+	data: {
+            type : String,
+            value: ""
+	},
+	start: {
+            type : Date,
+            value: new Date(Date.now() - 1000 * 60 * 60 * 24)
+	},
+	end: {
+            type : Date,
+            value: new Date()
+	},
+	yZoom: {
+            type    : Number,
+            value   : 100,
+            observer: '_yZoomChanged'      
+	},
+    },
+    // add a callback to the element's prototype
+    ready: function() {
+	this.viz = loadGraph( this, this.source, this.data, this.start, this.end );
+    },
+
+    _yZoomChanged: function ( newZoom, oldZoom ) {
+	console.log( "Zoom zoom zoom:", oldZoom, newZoom );
+	if ( this.viz !== undefined )
+	    this.viz.setYZoom( newZoom );
+    }
+    
+});
+
+
 
 function snapBound ( time, bucketSize ) {
     return Math.floor( time / bucketSize ) * bucketSize;
@@ -65,7 +105,7 @@ var Viz = new function ( ) {
 	dot_canvas.height = 6;
 
 	var dot_ctx = dot_canvas.getContext("2d");
-	dot_ctx.fillStyle = "rgba(0,0,255,0.2)";
+	dot_ctx.fillStyle = "rgba(64,128,255,0.63)";
 	dot_ctx.moveTo(3,3);
 	dot_ctx.arc(3, 3, 2.5, 0, 2 * Math.PI);
 	dot_ctx.fill();
@@ -81,11 +121,15 @@ var Viz = new function ( ) {
     function init ( fData, fCanvas, fContext, fPoint, fX, fY, fColor, fStart, fEnd, fDrawSchulded, fDot, fWidth, fHeight ) {
 	var self = { };
 	self.updateGraph = updateGraph;
+	self.setYZoom = setYZoom;
 
 	fX.domain([fStart, fEnd]).nice();
 	fY.domain([-1500,1500]).nice();
 
 	var fAccurecy = 0;
+	var fValueMin;
+	var fValueMax;
+	var fYZoom = 1.0;
 
 	var zoom = d3.behavior.zoom();
 	d3.select(fCanvas).call(zoom);
@@ -96,6 +140,11 @@ var Viz = new function ( ) {
 	;
 
 	return self;
+
+	function setYZoom ( newValue ) {
+	    fYZoom = newValue/100;
+	    updateYDomain( fValueMin, fValueMax );
+	}
 
 	function doZoom ( ) {
 	    var domain = fX.domain();
@@ -111,20 +160,40 @@ var Viz = new function ( ) {
 	    schudleDraw( );
 	}
 
+	function updateYDomain ( min, max ) {
+	    fValueMin = min;
+	    fValueMax = max;
+	    var useValue = fYZoom * Math.max(
+		Math.abs(fValueMin),
+		Math.abs(fValueMax)
+	    );
+
+	    fY.domain( [useValue * -1, useValue] );
+
+	    schudleDraw();
+	}
+
 	function updateGraph ( data ) {
 	    var buffer = loadBuffer( data );
 	    addData( buffer );
 
-	    if ( fDrawSchulded == false ) {
+	    if ( fDrawSchulded === false ) {
 		requestAnimationFrame(function () {
-		    plotPoints([buffer], fContext, fPoint, fStart, fEnd, fX, fY, fAccurecy);
+		    var yDomain = plotPoints([buffer], fContext, fPoint, fX, fY, fAccurecy);
+		    // We assume that either or both of min and
+		    // max will be set.
+		    if ( fValueMin === undefined
+			 || fValueMin > yDomain[0] 
+			 || fValueMax < yDomain[1] ) {
+			updateYDomain( yDomain[0], yDomain[1] );
+		    }
 		});
 	    }
 	    
 	}
 
 	function schudleDraw ( ) {
-	    if ( fDrawSchulded == false ) {
+	    if ( fDrawSchulded === false ) {
 		fDrawSchulded = true;
 		requestAnimationFrame( drawGraph );
 	    }
@@ -133,11 +202,15 @@ var Viz = new function ( ) {
 	function drawGraph ( ) {
 	    fDrawSchulded = false;
 	    
-
 	    fContext.beginPath();
 	    fContext.clearRect(0, 0, fWidth, fHeight);
 
-	    plotPoints(fData, fContext, fPoint, fStart, fEnd, fX, fY, fAccurecy);
+	    var yDomain = plotPoints(fData, fContext, fPoint, fX, fY, fAccurecy);
+	    /*
+	    if ( fValueMin !== yDomain[0] || fValueMax !== yDomain[1] ) {
+		updateYDomain(yDomain[0], yDomain[1]);
+	    }
+	    */
 	}
 
 	function addData ( buffer ) {
@@ -152,58 +225,86 @@ var Viz = new function ( ) {
     }
 
 
-    function plotPoints ( data, context, point, min, max, xScale, yScale, accuracy ) {
+    function plotPoints ( data, context, point, xScale, yScale, accuracy ) {
 	var lastX   = undefined;
 	var lastY   = undefined;
 
-	var totalPoints = 0;
-	var usedPoints  = 0;
+	var totalPoints = 0 | 0;
+	var usedPoints  = 0 | 0;
 	
 	var domain = xScale.domain();
-	var min = domain[0];
-	var max = domain[1];
+	var xMin = domain[0];
+	var xMax = domain[1];
+	var range = xScale.range();
+	var xFactor = (xMax - xMin)/(range[1] - range[0]);
+	var yRange =  yScale.range();
+	var yDomain = yScale.domain();
+	var yMin = yDomain[0];
+	var yFactor = Math.abs((yDomain[1] - yMin)/(yRange[1] - yRange[0]));
+
+	var minValue = undefined;
+	var maxValue = undefined;
 
 	for ( var i = 0 ; i < data.length ; i++ ) {
 
 	    var buffer   = data[i];
 	    var iterator = initIterator( buffer );
 
-	    var record = { time : undefined, value : undefined };
-
 	    inner:
-	    while ( nextValue( iterator, buffer, record ) ) {
-
+	    while ( nextValue( buffer, iterator ) !== 0 ) {
 		totalPoints++;
+		
+		var value = readValue( iterator );
+		var time  = readTime( iterator );
 
-		if (  record.time > max )
+		if (  time > xMax )
 		    break inner;
 
-		if (  record.time <= min )
+		if (  time <= xMin )
 		    continue inner;
+		
+		if ( minValue === undefined || minValue > value )
+		    minValue = value;
 
-		var x = (xScale( record.time )  + 0.5) | 0;
-		var y = (yScale( record.value ) + 0.5) | 0;
+		if ( maxValue === undefined || maxValue < value )
+		    maxValue = value;
 
-		if ( Math.abs(lastX - x) <= accuracy
-		     && Math.abs(lastY - y) <= accuracy )
-		    continue inner;
+		//var x = (time - xMin)/xFactor;
+		//var y = (value - yMin)/yFactor;
+		var x = xScale( time );
+		var y = yScale( value );
+		
+		if ( accuracy > 0 ) {
+		    // If we are aproxamating roud to pixials
+		    x = ( x + 0.5 ) | 0;
+		    y = ( y + 0.5 ) | 0;
+		    
+		    // We assume either niter or both of
+		    // last x and y will be set.
+		    if ( lastX !== undefined
+			 && Math.abs(lastX - x) <= accuracy
+			 && Math.abs(lastY - y) <= accuracy )
+			continue inner;
+		}
+		
 
 		usedPoints++;
+
 		lastX = x;
 		lastY = y;
-
+		
 		context.drawImage(point, x, y);
 	    }
 
 	    finishIterator( iterator );
 
 	    
-	    if ( record.time > max )
+	    if ( time > xMax )
 		break;
-	
 	}
 
-	//console.log( "Used %d out of %d points for range %d to %d", usedPoints, totalPoints, min, max );
+	//console.log( "Used %d out of %d points for range %d to %d", usedPoints, totalPoints, xMin, xMax );
+	return [minValue, maxValue];
     }
 
 }
@@ -275,7 +376,7 @@ function loadGraph ( root, source, type, startDate, endDate ) {
 
     getMyData( startTime, endTime );
 
-    return;
+    return viz;
 
     function getMyData ( startTime, endTime ) {
 	if ( startTime != 0 ) //BUG: wont work for epoc tile

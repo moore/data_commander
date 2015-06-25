@@ -1,9 +1,9 @@
 <link rel="import" href="/components/bower_components/polymer/polymer.html">
+<link rel="import" href="/components/bower_components/paper-slider/paper-slider.html">
 
 <script src="dc.js"></script>
 
 <script src="/libs/d3.min.js"></script>
-<script rel="import" src="dc-chart.js"></script>
 
 <dom-module id="dc-chart">
   <template>
@@ -12,41 +12,18 @@
       This is <strong>{{source}}</strong> data of type "<span>{{data}}</span>".
       <div id="container"></div>
     </p>
-  <canvas id="chart" width="1000" height="500"  style="transform: translateZ(0)">
-  </canvas>
+    <div>
+      Zoom:<paper-slider value="{{yZoom}}" max="100" editable role="slider" class="y-slider" tabindex="0" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"></paper-slider>
+    </div>
+    <div width="1000" height="500">
+      <canvas id="chart" width="1000" height="500"  style="transform: translateZ(0)">
+      </canvas>
+    </div>
 
   </template>
 </dom-module>
 
-
-<script>
-  // register a new element called proto-element
-  Polymer({
-    is: "dc-chart",
-    properties: {
-      source: {
-        type : String,
-        value: ""
-      },
-      data: {
-        type : String,
-        value: ""
-      },
-      start: {
-        type : Date,
-        value: new Date(Date.now() - 1000 * 60 * 60 * 24)
-      },
-      end: {
-        type : Date,
-        value: new Date()
-      }
-    },
-    // add a callback to the element's prototype
-    ready: function() {
-       loadGraph( this, this.source, this.data, this.start, this.end );
-    }
-  });
-</script>
+<script rel="import" src="dc-chart.js"></script>
 
 
 

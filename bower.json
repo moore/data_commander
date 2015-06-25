@@ -1,0 +1,12 @@
+{
+  "name": "data-commander",
+  "version": "0.0.0",
+  "homepage": "https://github.com/moore/data_commander",
+  "description": "Be the commander of your own data.",
+  "license": "MIT",
+  "dependencies": {
+    "paper-slider": "PolymerElements/paper-slider#^1.0.0",
+    "paper-styles": "PolymerElements/paper-styles#^1.0.0",
+    "iron-flex-layout": "PolymerElements/iron-flex-layout#^1.0.0"
+  }
+}

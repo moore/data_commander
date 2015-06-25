@@ -17,5 +17,24 @@
     { "name" : "variance1"    , "type" : "int64"  , "repeated" : true  },
     { "name" : "variance2"    , "type" : "int64"  , "repeated" : true  },
     { "name" : "times"        , "type" : "uint64" , "repeated" : true  }
+  ] },
+
+ { "type"    : "TableTile",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "tableType" , "type" : "utf8"  },
+    { "name" : "columns"   , "type" : "Column" , "repeated" : true  }
+  ] },
+
+ { "type"    : "Column",
+    "version" : 2 ,
+    "fields" : [
+    { "name" : "name"        , "type" : "utf8"   },
+    { "name" : "encoding"    , "type" : "uint8"  },
+    { "name" : "aggregation" , "type" : "uint8"  },
+    { "name" : "units"       , "type" : "utf8"   },
+    { "name" : "baseValue"   , "type" : "int64"  },
+    { "name" : "valueFactor" , "type" : "int8"   },
+    { "name" : "values"      , "type" : "int64"  , "repeated" : true  }
   ] }
 ]

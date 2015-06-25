@@ -18,7 +18,7 @@ MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readStartTime', '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readVariance1', '_readStartTime', '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
 
 .PHONY: all clean distclean 
 all:: js
@@ -38,16 +38,17 @@ ${HTDOCS}: js
 	mkdir -p ${HTDOCS}/components
 	cp -r components ${HTDOCS}/
 	cp -r ${COMPONENTS_SRC}/* ${HTDOCS}/components/
+	cp -r bower_components/  ${HTDOCS}/components/
 	cp ${BUILD_JS_DIR}/* ${HTDOCS}/components/chart/
 	mkdir -p ${HTDOCS}/data
 	cp ./data/* ${HTDOCS}/data/
 	mkdir -p ${HTDOCS}/libs
 	cp ./libs/js/*.js ${HTDOCS}/libs/
 
-${MESSAGE_HEADDERS_DIR}:
+${MESSAGE_HEADDERS_DIR}: 
 	mkdir -p ${MESSAGE_HEADDERS_DIR}
 
-${MESSAGE_HEADDERS} : ${MESSAGE_HEADDERS_DIR}
+${MESSAGE_HEADDERS} : ${MESSAGE_HEADDERS_DIR} ${MESSAGE_JSON}
 	messagebuilder c ${MESSAGE_JSON} | cat -s > ${MESSAGE_HEADDERS}
 	astyle --delete-empty-lines --break-blocks --break-closing-brackets ${MESSAGE_HEADDERS}
 
@@ -60,6 +61,7 @@ server : ${HTDOCS}
 buildtile: ${BUILD_BIN_DIR} ${MESSAGE_HEADDERS}
 	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtile src/go/planet.com/dc/build_tile.go
 	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildregisters src/go/planet.com/dc/build_register_tile.go
+	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtables src/go/planet.com/dc/build_table_tile.go
 
 ${CERTS_DIR}:
 	mkdir -p ${CERTS_DIR}
