@@ -87,6 +87,7 @@ var Viz = new function ( ) {
     function constructor ( root, start, end ) {
 	var canvas  = root.querySelector( "#chart" );
 	var gl = canvas.getContext("webgl");
+	var plotElment = root.querySelector( "#plot-svg" );
 
 	var width  = canvas.clientWidth;
 	var height = canvas.clientHeight;
@@ -94,7 +95,7 @@ var Viz = new function ( ) {
 	var glVars  = initShaders( root, gl );
 	var buffers = initBuffers( gl, glVars );
 
-	gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
+	gl.clearColor(0.0, 0.0, 0.0, 0.0);  // Clear to black, fully opaque
         gl.clearDepth(1.0);                 // Clear everything
         gl.enable(gl.DEPTH_TEST);           // Enable depth testing
         gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
@@ -111,12 +112,12 @@ var Viz = new function ( ) {
 	var data = [];
 	var drawSchulded = false;
 
-	var self = init( data, canvas, gl, buffers, glVars, x, y, start, end, drawSchulded, width, height );
+	var self = init( data, root, plotElment, canvas, gl, buffers, glVars, x, y, start, end, drawSchulded, width, height );
 
 	return self;
     }
 
-    function init ( fData, fCanvas, fGl, fBuffers, fGlVars, fX, fY, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
+    function init ( fData, fRoot, fPlotElement, fCanvas, fGl, fBuffers, fGlVars, fX, fY, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
 	var self = { };
 	self.updateGraph = updateGraph;
 	self.setYZoom = setYZoom;
@@ -133,7 +134,7 @@ var Viz = new function ( ) {
 	var fDataArray   = new Float32Array(fMaxPoints*2);
 
 	var zoom = d3.behavior.zoom();
-	d3.select(fCanvas).call(zoom);
+	d3.select(fPlotElement).call(zoom);
         zoom
 	    .on("zoom", doZoom)
 	    .on("zoomend", zoomEnd)
@@ -201,8 +202,16 @@ var Viz = new function ( ) {
 	    var translate = zoom.translate();
 	    var scale     = zoom.scale();
 
+	    var elementBox = fPlotElement.getBoundingClientRect();
+	    var top        = fPlotElement.offsetTop;
+	    var left       = fPlotElement.offsetLeft;
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+	    console.log( "offsetTop %s, offsetLeft %s, width %s, height %s", top, left, width, height ); //BOOG
+
+
 	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, fDataArray, translate, scale,
-		    fStart, fEnd, fValueMin, fValueMax );
+		    fStart, fEnd, fValueMin, fValueMax, top, left, width, height );
 	}
 
 	function addData ( buffer ) {
@@ -303,20 +312,22 @@ var Viz = new function ( ) {
     }
 
     function doGlDraw ( gl, glBuffers, glVars, pointsCount, pointData, translate, scale,
-		      xMin, xMax, yMin, yMax ) {
+		      xMin, xMax, yMin, yMax, top, left, width, height ) {
 
 	resize( gl );
 
-	var width = gl.canvas.clientWidth;
-	var height = gl.canvas.clientHeight;
+	var glWidth  = gl.canvas.clientWidth;
+	var glHeight = gl.canvas.clientHeight;
 
 	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
 	var translation = vec3.create();
 	var perspectiveMatrix = mat4.create();
 
-	mat4.ortho(perspectiveMatrix, 0, width, 0, height, 0.1, 100.0 );
-	vec3.set(translation, width/2, height/2, 1);
+	// Set up the canvas units to be in pixles and
+	// move the origan to the top left.
+	mat4.ortho(perspectiveMatrix, 0, glWidth, 0, glHeight, 0.1, 100.0 );
+	vec3.set(translation, glWidth/2, glHeight, 0);
 	mat4.translate(perspectiveMatrix, perspectiveMatrix, translation);
 
 
@@ -324,18 +335,25 @@ var Viz = new function ( ) {
 	mat4.identity(matrix);
 	
 	// BUG: I don't understand the need for the -10 z translation
-	vec3.set(translation, -(width/2) + translate[0], height/2, -10);
+	vec3.set(translation, -(width/2), -top, -10 );
 	mat4.translate(matrix, matrix, translation);
 
+	// Translate based on zoom
+	vec3.set(translation,  translate[0], 0, 0 );
+	mat4.translate(matrix, matrix, translation);
+
+	// Scale based on zoom
 	vec3.set(translation, scale, 1, 1);
 	mat4.scale(matrix, matrix, translation);
 
 	var xScale = width/(xMax - xMin);
 	var yScale = height/(yMax - yMin);
 
+	// Scale from base units to pixles
 	vec3.set(translation, xScale, yScale, 1);
 	mat4.scale(matrix, matrix, translation);
 
+	// ??? why do we need this agin?
 	vec3.set(translation, 0, yMin, 0);
 	mat4.translate(matrix, matrix, translation);
 
