@@ -23,22 +23,12 @@ Polymer({
             type : Date,
             value: new Date()
 	},
-	yZoom: {
-            type    : Number,
-            value   : 100,
-            observer: '_yZoomChanged'      
-	},
     },
     // add a callback to the element's prototype
     ready: function() {
 	this.viz = loadGraph( this, this.source, this.data, this.start, this.end );
     },
 
-    _yZoomChanged: function ( newZoom, oldZoom ) {
-	console.log( "Zoom zoom zoom:", oldZoom, newZoom );
-	if ( this.viz !== undefined )
-	    this.viz.setYZoom( newZoom );
-    }
     
 });
 
@@ -120,7 +110,6 @@ var Viz = new function ( ) {
     function init ( fData, fRoot, fPlotElement, fCanvas, fGl, fBuffers, fGlVars, fX, fY, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
 	var self = { };
 	self.updateGraph = updateGraph;
-	self.setYZoom = setYZoom;
 
 	fX.domain([fStart, fEnd]).nice();
 	fY.domain([-1500,1500]).nice();
@@ -132,46 +121,59 @@ var Viz = new function ( ) {
 	var fMaxPoints   = Math.pow(10, 6);
 	var fPointsCount = 0;
 	var fDataArray   = new Float32Array(fMaxPoints*2);
+	var fDoZoomY     = false;
+	var fScaleX      = 1;
+	var fTranslateX  = 0;
+	var fScaleY      = 1;
+	var fTranslateY  = 0;
 
 	var zoom = d3.behavior.zoom();
 	d3.select(fPlotElement).call(zoom);
         zoom
 	    .on("zoom", doZoom)
-	    .on("zoomend", zoomEnd)
 	;
 	
+	initZoomY();
+
 	return self;
 
-	function setYZoom ( newValue ) {
-	    fYZoom = newValue/100;
-	    updateYDomain( fValueMin, fValueMax );
+	function initZoomY ( ) {
+	    var checkbox = fRoot.querySelector( "#zoom-y" );
+	    checkbox.onclick = function ( ) {
+
+		var translate = zoom.translate();
+
+		if ( checkbox.checked === false ) {
+		    zoom.scale( fScaleX );
+		    translate[0] = fTranslateX;
+		}
+		
+		else {
+		    zoom.scale( fScaleY );
+		    translate[1] = fTranslateY;
+		}
+
+		zoom.translate( translate );
+
+		fDoZoomY = checkbox.checked ;
+	    }
 	}
 
 	function doZoom ( ) {
-	    var domain = fX.domain();
-	    var min = domain[0];
-	    var max = domain[1];
-	    var range = Math.floor(((max - min)/(1000*90)/1000));
-	    fAccurecy = Math.min( range, 20 );
+	    var translate = zoom.translate();
+	    var scale     = zoom.scale();
+
+	    if ( fDoZoomY === true ) {
+		fScaleY     = scale;
+		fTranslateY =  translate[1];
+	    }
+	    
+	    else {
+		fScaleX     = scale;
+		fTranslateX = translate[0];
+	    }
+
 	    schudleDraw( );
-	}
-
-	function zoomEnd  ( ) {
-	    fAccurecy = 0;
-	    schudleDraw( );
-	}
-
-	function updateYDomain ( min, max ) {
-	    fValueMin = min;
-	    fValueMax = max;
-	    var useValue = fYZoom * Math.max(
-		Math.abs(fValueMin),
-		Math.abs(fValueMax)
-	    );
-
-	    fY.domain( [useValue * -1, useValue] );
-
-	    schudleDraw();
 	}
 
 	function updateGraph ( data ) {
@@ -199,19 +201,16 @@ var Viz = new function ( ) {
 
 	function drawGraph ( ) {
 	    fDrawSchulded = false;
-	    var translate = zoom.translate();
-	    var scale     = zoom.scale();
 
 	    var elementBox = fPlotElement.getBoundingClientRect();
 	    var top        = fPlotElement.offsetTop;
 	    var left       = fPlotElement.offsetLeft;
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
-	    console.log( "offsetTop %s, offsetLeft %s, width %s, height %s", top, left, width, height ); //BOOG
 
-
-	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, fDataArray, translate, scale,
-		    fStart, fEnd, fValueMin, fValueMax, top, left, width, height );
+	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, fDataArray, 
+		      fTranslateX, fTranslateY, fScaleX, fScaleY,
+		      fStart, fEnd, fValueMin, fValueMax, top, left, width, height );
 	}
 
 	function addData ( buffer ) {
@@ -227,7 +226,7 @@ var Viz = new function ( ) {
 
 
     function plotPoints ( data, gl, buffers, glVars, xScale, yScale, accuracy,
-			fMaxPoints, fPointsCount, fDataArray, xMin, xMax, yMin, yMax ) {
+			fMaxPoints, fPointsCount, fDataArray, xMin, xMax, yMin, yMax) {
 	var lastX   = undefined;
 	var lastY   = undefined;
 
@@ -311,8 +310,9 @@ var Viz = new function ( ) {
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     }
 
-    function doGlDraw ( gl, glBuffers, glVars, pointsCount, pointData, translate, scale,
-		      xMin, xMax, yMin, yMax, top, left, width, height ) {
+    function doGlDraw ( gl, glBuffers, glVars, pointsCount, pointData,
+		    	fTranslateX, fTranslateY, fScaleX, fScaleY,
+			xMin, xMax, yMin, yMax, top, left, width, height ) {
 
 	resize( gl );
 
@@ -339,11 +339,11 @@ var Viz = new function ( ) {
 	mat4.translate(matrix, matrix, translation);
 
 	// Translate based on zoom
-	vec3.set(translation,  translate[0], 0, 0 );
+	vec3.set(translation,  fTranslateX, -fTranslateY, 0 );
 	mat4.translate(matrix, matrix, translation);
 
 	// Scale based on zoom
-	vec3.set(translation, scale, 1, 1);
+	vec3.set(translation, fScaleX, fScaleY, 1);
 	mat4.scale(matrix, matrix, translation);
 
 	var xScale = width/(xMax - xMin);
@@ -353,7 +353,7 @@ var Viz = new function ( ) {
 	vec3.set(translation, xScale, yScale, 1);
 	mat4.scale(matrix, matrix, translation);
 
-	// ??? why do we need this agin?
+	// Move data origan to bottom left
 	vec3.set(translation, 0, yMin, 0);
 	mat4.translate(matrix, matrix, translation);
 
