@@ -366,6 +366,24 @@ var Viz = new function ( ) {
 	var mvUniform = gl.getUniformLocation(glVars.shader, "uMVMatrix");
 	gl.uniformMatrix4fv(mvUniform, false, matrix);
 
+	var xMaxLoc = gl.getUniformLocation(glVars.shader, "xMax");
+	var xMaxClip =  ( ( left + width ) - glWidth/2)/(glWidth/2);
+	gl.uniform1f(xMaxLoc, xMaxClip);
+
+	var xMinLoc = gl.getUniformLocation(glVars.shader, "xMin");
+	var xMinClip =  (left - glWidth/2 )/(glWidth/2);
+	gl.uniform1f(xMinLoc, xMinClip);
+
+	var yMaxLoc = gl.getUniformLocation(glVars.shader, "yMax");
+	var yMaxClip = (glHeight/2 - top )/(glHeight/2);
+	gl.uniform1f(yMaxLoc, yMaxClip);
+
+	var yMinLoc = gl.getUniformLocation(glVars.shader, "yMin");
+	var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
+	gl.uniform1f(yMinLoc, yMinClip);
+
+	console.log( "min  %s max %s", xMinClip, xMaxClip ); //BOOG
+
 	gl.drawArrays(gl.POINTS, 0, pointsCount);
 	return;
     }
@@ -385,7 +403,7 @@ var Viz = new function ( ) {
 	// If creating the shader program failed, alert
 	
 	if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-            alert("Unable to initialize the shader program.");
+            console.log("Unable to initialize the shader program.");
 	}
 	
 	gl.useProgram(shaderProgram);
@@ -481,7 +499,7 @@ var Viz = new function ( ) {
 	// See if it compiled successfully
 	
 	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            alert("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+            console.log("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
             return null;
 	}
 	
