@@ -71,13 +71,104 @@ function getDataWorker ( source, valueType, tileStart, handler ) {
 }
 
 
+var View = new function ( ) {
+    return constructor;
+
+    function constructor ( root, viz ) {
+
+	var self = init( root, viz );
+
+	return self;
+    }
+
+    function init ( fRoot, fViz ) {
+	var self = {};
+
+	var fDoZoomY     = false;
+	var fScaleX      = 1;
+	var fTranslateX  = 0;
+	var fScaleY      = 1;
+	var fTranslateY  = 0;
+	var fZoom = d3.behavior.zoom();
+
+	d3.select(fRoot).call(fZoom);
+        fZoom
+	    .on("zoom", doZoom)
+	;
+	
+	initZoomY();
+
+	self.doDraw = doDraw;
+
+	return self;
+
+	function initZoomY ( ) {
+	    var checkbox = fRoot.querySelector( "#zoom-y" );
+	    checkbox.onclick = function ( ) {
+
+		var translate = fZoom.translate();
+
+		if ( checkbox.checked === false ) {
+		    fZoom.scale( fScaleX );
+		    translate[0] = fTranslateX;
+		}
+		
+		else {
+		    fZoom.scale( fScaleY );
+		    translate[1] = fTranslateY;
+		}
+
+		fZoom.translate( translate );
+
+		fDoZoomY = checkbox.checked ;
+	    }
+	}
+
+	function doZoom ( ) {
+	    var translate = fZoom.translate();
+	    var scale     = fZoom.scale();
+
+	    if ( fDoZoomY === true ) {
+		fScaleY     = scale;
+		fTranslateY =  translate[1];
+	    }
+	    
+	    else {
+		fScaleX     = scale;
+		fTranslateX = translate[0];
+	    }
+
+	    fViz.schudleDraw( );
+	}
+
+	function doDraw ( gl, guffers, glVars, pointsCount, 
+			  start, end, valueMin, valueMax) {
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var top        = fRoot.offsetTop;
+	    var left       = fRoot.offsetLeft;
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+
+
+	    doGlDraw( gl, guffers, glVars, pointsCount, 
+		      fTranslateX, fTranslateY, fScaleX, fScaleY,
+		      start, end, valueMin, valueMax, 
+		      top, left, width, height );
+
+	}
+    }
+
+
+
+};
+
 var Viz = new function ( ) {
     return constructor;
 
-    function constructor ( root, start, end ) {
+    function constructor ( root, start, end, plots ) {
 	var canvas  = root.querySelector( "#chart" );
 	var gl = canvas.getContext("webgl");
-	var plotElment = root.querySelector( "#plot-svg" );
+	//var plotElment = root.querySelector( "#plot-svg" );
 
 	var width  = canvas.clientWidth;
 	var height = canvas.clientHeight;
@@ -90,87 +181,41 @@ var Viz = new function ( ) {
         gl.enable(gl.DEPTH_TEST);           // Enable depth testing
         gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
 
-	console.log( "width %s, height %s", width, height, canvas );
-
 	var data = [];
 	var drawSchulded = false;
+	var views = [];
 
-	var self = init( data, root, plotElment, canvas, gl, buffers, glVars, start, end, drawSchulded, width, height );
+
+	var self = init( data, root, canvas, gl, buffers, glVars, start, end, drawSchulded, width, height, views );
+
+	for ( var i = 0 ; i < plots.length ; i++ ) {
+	    var element = root.querySelector( "#" + plots[i] );
+	    views.push( new View ( element, self ) ); 
+	}
+
 
 	return self;
     }
 
-    function init ( fData, fRoot, fPlotElement, fCanvas, fGl, fBuffers, fGlVars, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
+    function init ( fData, fRoot, fCanvas, fGl, fBuffers, fGlVars, fStart, fEnd, fDrawSchulded, fWidth, fHeight, fViews ) {
 	var self = { };
 	self.updateGraph = updateGraph;
+	self.schudleDraw = schudleDraw;
 
-	var fAccurecy = 0;
-	var fValueMin = -1500;
-	var fValueMax = 1500;
+	var fValueMin    = -1500;
+	var fValueMax    = 1500;
 	var fMaxPoints   = Math.pow(10, 6);
 	var fPointsCount = 0;
 	var fDataArray   = new Float32Array(fMaxPoints*2);
-	var fDoZoomY     = false;
-	var fScaleX      = 1;
-	var fTranslateX  = 0;
-	var fScaleY      = 1;
-	var fTranslateY  = 0;
-
-	var zoom = d3.behavior.zoom();
-	d3.select(fPlotElement).call(zoom);
-        zoom
-	    .on("zoom", doZoom)
-	;
-	
-	initZoomY();
 
 	return self;
-
-	function initZoomY ( ) {
-	    var checkbox = fRoot.querySelector( "#zoom-y" );
-	    checkbox.onclick = function ( ) {
-
-		var translate = zoom.translate();
-
-		if ( checkbox.checked === false ) {
-		    zoom.scale( fScaleX );
-		    translate[0] = fTranslateX;
-		}
-		
-		else {
-		    zoom.scale( fScaleY );
-		    translate[1] = fTranslateY;
-		}
-
-		zoom.translate( translate );
-
-		fDoZoomY = checkbox.checked ;
-	    }
-	}
-
-	function doZoom ( ) {
-	    var translate = zoom.translate();
-	    var scale     = zoom.scale();
-
-	    if ( fDoZoomY === true ) {
-		fScaleY     = scale;
-		fTranslateY =  translate[1];
-	    }
-	    
-	    else {
-		fScaleX     = scale;
-		fTranslateX = translate[0];
-	    }
-
-	    schudleDraw( );
-	}
 
 	function updateGraph ( data ) {
 	    var buffer = loadBuffer( data );
 	    addData( buffer );
 	    	
 	    var results = 
-		plotPoints([buffer], fGl, fBuffers, fGlVars, fAccurecy,
+		plotPoints([buffer], fGl, fBuffers, fGlVars,
 			   fMaxPoints, fPointsCount, fDataArray, fStart, fEnd,
 			   fValueMin, fValueMax);
 		
@@ -191,15 +236,13 @@ var Viz = new function ( ) {
 	function drawGraph ( ) {
 	    fDrawSchulded = false;
 
-	    var elementBox = fPlotElement.getBoundingClientRect();
-	    var top        = fPlotElement.offsetTop;
-	    var left       = fPlotElement.offsetLeft;
-	    var width      = elementBox.width;
-	    var height     = elementBox.height;
+	    resize( fGl );
 
-	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, 
-		      fTranslateX, fTranslateY, fScaleX, fScaleY,
-		      fStart, fEnd, fValueMin, fValueMax, top, left, width, height );
+	    for ( var i = 0 ; i < fViews.length ; i++ ) {
+
+		fViews[i].doDraw( fGl, fBuffers, fGlVars, fPointsCount, 
+				  fStart, fEnd, fValueMin, fValueMax);
+	    }
 	}
 
 	function addData ( buffer ) {
@@ -214,7 +257,7 @@ var Viz = new function ( ) {
     }
 
 
-    function plotPoints ( data, gl, buffers, glVars, accuracy,
+    function plotPoints ( data, gl, buffers, glVars,
 			fMaxPoints, fPointsCount, fDataArray, xMin, xMax, yMin, yMax) {
 	var lastX   = undefined;
 	var lastY   = undefined;
@@ -297,81 +340,6 @@ var Viz = new function ( ) {
 	    gl.canvas.height = height;
 	}
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    }
-
-    function doGlDraw ( gl, glBuffers, glVars, pointsCount,
-		    	fTranslateX, fTranslateY, fScaleX, fScaleY,
-			xMin, xMax, yMin, yMax, top, left, width, height ) {
-
-	resize( gl );
-
-	var glWidth  = gl.canvas.clientWidth;
-	var glHeight = gl.canvas.clientHeight;
-
-	gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-	var translation = vec3.create();
-	var perspectiveMatrix = mat4.create();
-
-	// Set up the canvas units to be in pixles and
-	// move the origan to the top left.
-	mat4.ortho(perspectiveMatrix, 0, glWidth, 0, glHeight, 0.1, 100.0 );
-	vec3.set(translation, glWidth/2, glHeight, 0);
-	mat4.translate(perspectiveMatrix, perspectiveMatrix, translation);
-
-	var matrix = mat4.create();
-	mat4.identity(matrix);
-	
-	// BUG: I don't understand the need for the -10 z translation
-	vec3.set(translation, -(width/2), -top, -10 );
-	mat4.translate(matrix, matrix, translation);
-
-	// Translate based on zoom
-	vec3.set(translation,  fTranslateX, -fTranslateY, 0 );
-	mat4.translate(matrix, matrix, translation);
-
-	// Scale based on zoom
-	vec3.set(translation, fScaleX, fScaleY, 1);
-	mat4.scale(matrix, matrix, translation);
-
-	var xScale = width/(xMax - xMin);
-	var yScale = height/(yMax - yMin);
-
-	// Scale from base units to pixles
-	vec3.set(translation, xScale, yScale, 1);
-	mat4.scale(matrix, matrix, translation);
-
-	// Move data origan to bottom left
-	vec3.set(translation, 0, yMin, 0);
-	mat4.translate(matrix, matrix, translation);
-
-	gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers.points);
-	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
-
-	var pUniform = gl.getUniformLocation(glVars.shader, "uPMatrix");
-	gl.uniformMatrix4fv(pUniform, false, perspectiveMatrix);
-
-	var mvUniform = gl.getUniformLocation(glVars.shader, "uMVMatrix");
-	gl.uniformMatrix4fv(mvUniform, false, matrix);
-
-	var xMaxLoc = gl.getUniformLocation(glVars.shader, "xMax");
-	var xMaxClip =  ( ( left + width ) - glWidth/2)/(glWidth/2);
-	gl.uniform1f(xMaxLoc, xMaxClip);
-
-	var xMinLoc = gl.getUniformLocation(glVars.shader, "xMin");
-	var xMinClip =  (left - glWidth/2 )/(glWidth/2);
-	gl.uniform1f(xMinLoc, xMinClip);
-
-	var yMaxLoc = gl.getUniformLocation(glVars.shader, "yMax");
-	var yMaxClip = (glHeight/2 - top )/(glHeight/2);
-	gl.uniform1f(yMaxLoc, yMaxClip);
-
-	var yMinLoc = gl.getUniformLocation(glVars.shader, "yMin");
-	var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
-	gl.uniform1f(yMinLoc, yMinClip);
-
-	gl.drawArrays(gl.POINTS, 0, pointsCount);
-	return;
     }
 
 
@@ -495,6 +463,79 @@ var Viz = new function ( ) {
 }
 
 
+function doGlDraw ( gl, glBuffers, glVars, pointsCount,
+		    fTranslateX, fTranslateY, fScaleX, fScaleY,
+		    xMin, xMax, yMin, yMax, top, left, width, height ) {
+
+
+    var glWidth  = gl.canvas.clientWidth;
+    var glHeight = gl.canvas.clientHeight;
+
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    var translation = vec3.create();
+    var perspectiveMatrix = mat4.create();
+
+    // Set up the canvas units to be in pixles and
+    // move the origan to the top left.
+    mat4.ortho(perspectiveMatrix, 0, glWidth, 0, glHeight, 0.1, 100.0 );
+    vec3.set(translation, glWidth/2, glHeight, 0);
+    mat4.translate(perspectiveMatrix, perspectiveMatrix, translation);
+
+    var matrix = mat4.create();
+    mat4.identity(matrix);
+    
+    // BUG: I don't understand the need for the -10 z translation
+    vec3.set(translation, -(width/2), -top, -10 );
+    mat4.translate(matrix, matrix, translation);
+
+    // Translate based on zoom
+    vec3.set(translation,  fTranslateX, -fTranslateY, 0 );
+    mat4.translate(matrix, matrix, translation);
+
+    // Scale based on zoom
+    vec3.set(translation, fScaleX, fScaleY, 1);
+    mat4.scale(matrix, matrix, translation);
+
+    var xScale = width/(xMax - xMin);
+    var yScale = height/(yMax - yMin);
+
+    // Scale from base units to pixles
+    vec3.set(translation, xScale, yScale, 1);
+    mat4.scale(matrix, matrix, translation);
+
+    // Move data origan to bottom left
+    vec3.set(translation, 0, yMin, 0);
+    mat4.translate(matrix, matrix, translation);
+
+    gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers.points);
+    gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
+
+    var pUniform = gl.getUniformLocation(glVars.shader, "uPMatrix");
+    gl.uniformMatrix4fv(pUniform, false, perspectiveMatrix);
+
+    var mvUniform = gl.getUniformLocation(glVars.shader, "uMVMatrix");
+    gl.uniformMatrix4fv(mvUniform, false, matrix);
+
+    var xMaxLoc = gl.getUniformLocation(glVars.shader, "xMax");
+    var xMaxClip =  ( ( left + width ) - glWidth/2)/(glWidth/2);
+    gl.uniform1f(xMaxLoc, xMaxClip);
+
+    var xMinLoc = gl.getUniformLocation(glVars.shader, "xMin");
+    var xMinClip =  (left - glWidth/2 )/(glWidth/2);
+    gl.uniform1f(xMinLoc, xMinClip);
+
+    var yMaxLoc = gl.getUniformLocation(glVars.shader, "yMax");
+    var yMaxClip = (glHeight/2 - top )/(glHeight/2);
+    gl.uniform1f(yMaxLoc, yMaxClip);
+
+    var yMinLoc = gl.getUniformLocation(glVars.shader, "yMin");
+    var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
+    gl.uniform1f(yMinLoc, yMinClip);
+
+    gl.drawArrays(gl.POINTS, 0, pointsCount);
+    return;
+}
 
 var doFetch = new function () {
     var queue       = [ ];
@@ -557,7 +598,7 @@ function loadGraph ( root, source, type, startDate, endDate ) {
     var endTime   = endDate.getTime();
     
 
-    var viz = Viz( root, startTime, endTime );
+    var viz = Viz( root, startTime, endTime, [ "time-plot" ] );
 
     getMyData( startTime, endTime );
 
