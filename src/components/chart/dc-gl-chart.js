@@ -92,32 +92,21 @@ var Viz = new function ( ) {
 
 	console.log( "width %s, height %s", width, height, canvas );
 
-	var x = d3.scale.linear()
-	    .range([0, 1000.0]);
-
-	var y = d3.scale.linear()
-	    .range([-700.0, 0]);
-
-
 	var data = [];
 	var drawSchulded = false;
 
-	var self = init( data, root, plotElment, canvas, gl, buffers, glVars, x, y, start, end, drawSchulded, width, height );
+	var self = init( data, root, plotElment, canvas, gl, buffers, glVars, start, end, drawSchulded, width, height );
 
 	return self;
     }
 
-    function init ( fData, fRoot, fPlotElement, fCanvas, fGl, fBuffers, fGlVars, fX, fY, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
+    function init ( fData, fRoot, fPlotElement, fCanvas, fGl, fBuffers, fGlVars, fStart, fEnd, fDrawSchulded, fWidth, fHeight ) {
 	var self = { };
 	self.updateGraph = updateGraph;
-
-	fX.domain([fStart, fEnd]).nice();
-	fY.domain([-1500,1500]).nice();
 
 	var fAccurecy = 0;
 	var fValueMin = -1500;
 	var fValueMax = 1500;
-	var fYZoom = 1.0;
 	var fMaxPoints   = Math.pow(10, 6);
 	var fPointsCount = 0;
 	var fDataArray   = new Float32Array(fMaxPoints*2);
@@ -181,7 +170,7 @@ var Viz = new function ( ) {
 	    addData( buffer );
 	    	
 	    var results = 
-		plotPoints([buffer], fGl, fBuffers, fGlVars, fX, fY, fAccurecy,
+		plotPoints([buffer], fGl, fBuffers, fGlVars, fAccurecy,
 			   fMaxPoints, fPointsCount, fDataArray, fStart, fEnd,
 			   fValueMin, fValueMax);
 		
@@ -225,7 +214,7 @@ var Viz = new function ( ) {
     }
 
 
-    function plotPoints ( data, gl, buffers, glVars, xScale, yScale, accuracy,
+    function plotPoints ( data, gl, buffers, glVars, accuracy,
 			fMaxPoints, fPointsCount, fDataArray, xMin, xMax, yMin, yMax) {
 	var lastX   = undefined;
 	var lastY   = undefined;
