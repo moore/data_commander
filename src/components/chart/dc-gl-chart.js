@@ -208,7 +208,7 @@ var Viz = new function ( ) {
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
 
-	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, fDataArray, 
+	    doGlDraw( fGl, fBuffers, fGlVars, fPointsCount, 
 		      fTranslateX, fTranslateY, fScaleX, fScaleY,
 		      fStart, fEnd, fValueMin, fValueMax, top, left, width, height );
 	}
@@ -310,7 +310,7 @@ var Viz = new function ( ) {
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     }
 
-    function doGlDraw ( gl, glBuffers, glVars, pointsCount, pointData,
+    function doGlDraw ( gl, glBuffers, glVars, pointsCount,
 		    	fTranslateX, fTranslateY, fScaleX, fScaleY,
 			xMin, xMax, yMin, yMax, top, left, width, height ) {
 
@@ -329,7 +329,6 @@ var Viz = new function ( ) {
 	mat4.ortho(perspectiveMatrix, 0, glWidth, 0, glHeight, 0.1, 100.0 );
 	vec3.set(translation, glWidth/2, glHeight, 0);
 	mat4.translate(perspectiveMatrix, perspectiveMatrix, translation);
-
 
 	var matrix = mat4.create();
 	mat4.identity(matrix);
@@ -381,8 +380,6 @@ var Viz = new function ( ) {
 	var yMinLoc = gl.getUniformLocation(glVars.shader, "yMin");
 	var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
 	gl.uniform1f(yMinLoc, yMinClip);
-
-	console.log( "min  %s max %s", xMinClip, xMaxClip ); //BOOG
 
 	gl.drawArrays(gl.POINTS, 0, pointsCount);
 	return;
