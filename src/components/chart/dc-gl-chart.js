@@ -1,7 +1,5 @@
 "use strict";
 
-var BUCKET_SIZE = 24 * 60 * 60 * 1000;
-var requestedTimes = {};
 
 // register a new element called proto-element
 Polymer({
@@ -33,55 +31,238 @@ Polymer({
 });
 
 
+var BatchAction = new function ( ) {
+    var LATER = Promise.resolve(true);
 
-function snapBound ( time, bucketSize ) {
-    return Math.floor( time / bucketSize ) * bucketSize;
-}
+    return init;
 
-function makePath ( dataSource, valueType, tileTime ) {
-    var result = '/data/' + dataSource + ':' + valueType + ':' + tileTime + '.tile';
-    return result;
-}
+    function init ( ) {
+	
+	var fBatchSchulded = false;
+	var fWork           = {};
 
-function getData ( source, valueType, start, end, handler ) {
-    var tileStart  = snapBound( start, BUCKET_SIZE );
-    var requestMax = snapBound( end, BUCKET_SIZE ) + BUCKET_SIZE ;
+	var self = {};
 
-    getDataWorker( source, valueType, tileStart, handler );
+	self.batch = batch;
 
-    // Defer the spicltive work
-    Promise.resolve(true).then( function () {
-	getDataWorker( source, valueType, tileStart - BUCKET_SIZE, handler );
-    
-	for ( var i = tileStart ; i < requestMax ; i += BUCKET_SIZE ) {
-	    getDataWorker( source, valueType, i, handler );
+	return self;
+
+	function batch ( callback, args ) {
+	    if ( fWork[ callback.name ] === undefined ) {
+		fWork[ callback.name ] = [ callback, args ];
+	    }
+
+	    if ( fBatchSchulded === false ) {
+		LATER.then( doBatches );
+		fBatchSchulded = true;
+	    }
 	}
-    });
-    
-}
 
+	function doBatches ( ) {
+	    fBatchSchulded = false;
+	    var work = Object.keys( fWork );
 
+	    for ( var i = 0 ; i < work.length ; i++ ) {
+		var job = fWork[work[i]];
+		job[0].apply( job[0], job[1] );
+	    }
 
-function getDataWorker ( source, valueType, tileStart, handler ) {
-    var dataPath = makePath( source, valueType, tileStart ) ;
-
-    if ( requestedTimes[ dataPath ] != true ) {
-	doFetch( dataPath, handler );	
+	    fWork = {};
+	}
     }
-}
+}; 
 
-
-var View = new function ( ) {
+var DataFetcher = new function ( ) {
+    var MAX = 10;
     return constructor;
 
-    function constructor ( root, viz ) {
+    function constructor ( ) {
 
-	var self = init( root, viz );
+	var self = init( );
 
 	return self;
     }
 
-    function init ( fRoot, fViz ) {
+
+    function init ( ) {
+	var fQueue       = [ ];
+	var fOutstanding = 0;
+	
+	var self = {};
+
+	self.fetch = doFetch;
+
+	return self;
+
+	function doFetch ( file, handler, error, handlerArg ) {
+	    if ( fOutstanding >= MAX )
+		fQueue.push( [file, handler, error, handlerArg] );
+
+	    else
+		doFetchWorker( file, handler, error, handlerArg );
+	}
+
+	function done () {
+	    fOutstanding--;
+	    if ( fOutstanding < MAX && fQueue.length > 0 )  {
+		var next = fQueue.shift();
+		doFetchWorker.apply( doFetchWorker, next );
+	    }
+	}
+
+	function doFetchWorker ( file, handler, error, handlerArg ) {
+	    fOutstanding++;
+	    fetch(file)  
+		.then( function(response) { 
+		    if (response.status !== 200) {  
+			error( response.status, handlerArg );
+			done();
+			return;  
+		    }
+
+		    response.arrayBuffer()
+			.then(finish)
+			.catch(function(err) {
+			    done();	
+			    error( err, handlerArg );
+			});  
+		} )  
+		.catch(function(err) {
+		    done();
+		    error( err, handlerArg );
+		});
+
+	    function finish ( data ) {
+		done();
+		handler(data, handlerArg);
+	    }
+	}
+    }
+
+};
+
+
+var RemoteData = new function ( ) {
+    var BUCKET_SIZE = 24 * 60 * 60 * 1000;
+    return init;
+
+    function init ( fFetcher, fSource, fType, fStart, fEnd ) {
+	var fBatcher         = new BatchAction ( );
+	var self             = {};
+	var fRequestedTimes  = {};
+	var fDataTiles       = {};
+	var fListeners       = [];
+	var fNewData         = [];
+	var fEventsTriggeres = [];
+
+	self.addListener = addListener;
+	self.getTile     = getTile;
+	self.getRange    = getRange;
+	self.getStart    = getStart;
+
+	getData( fFetcher, fSource, fType, fStart, fEnd, gotData, noData );
+
+	return self;
+
+	function addListener ( callback, options ) {
+	    fListeners.push( [ callback, options ] );
+	}
+
+	function getTile ( tileTime ) {
+	    return fDataTiles[ tileTime ];
+	}
+
+	function getRange ( start, end ) {
+	    // BOOG something like this but we probbly should track the range.
+	    //getData( fFetcher, fSource, fType, start, end, gotData, noData );
+	}
+
+	function getStart ( ) {
+	    return fStart;
+	}
+
+	function triggerEvents (  ) {
+	    fBatcher.batch( triggerEventsWorker );
+	}
+
+	function triggerEventsWorker ( ) {
+	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
+		var callbackInfo = fListeners[i]; 
+		callbackInfo[0]( fNewData.slice(0), callbackInfo[1] );
+	    }
+
+	    fNewData = [];
+	}
+
+	function gotData ( dataArray, tileStart ) {
+	    //console.log( "got data %s", tileStart ); //BOOG
+	    fNewData.push( dataArray );
+	    fDataTiles[ tileStart ] = dataArray;
+	    triggerEvents( );
+	}
+
+	function noData ( error, tileStart ) {
+	    /* BOOG
+	    console.log( "Could not get %s %s at %s becouse '%s'",
+			 fSource, fType, tileStart, error );
+	    */
+	    fRequestedTimes[ tileStart ] = false ;
+	}
+
+	function getData ( fetcher, source, type, start, end, handler, error ) {
+	    var tileStart  = snapBound( start, BUCKET_SIZE );
+	    var requestMax = snapBound( end, BUCKET_SIZE ) + BUCKET_SIZE ;
+
+	    getDataWorker( fetcher, source, type, tileStart, handler, error );
+
+	    // Defer the spicltive work
+	    Promise.resolve(true).then( function () {
+		getDataWorker( fetcher, source, type, tileStart - BUCKET_SIZE, handler, error );
+		
+		for ( var i = tileStart ; i < requestMax ; i += BUCKET_SIZE ) {
+		    getDataWorker( fetcher, source, type, i, handler, error );
+		}
+	    });
+	    
+	}
+
+	function getDataWorker ( fetcher, source, type, tileStart, handler, error ) {
+	    var dataPath = makePath( source, type, tileStart ) ;
+	    
+	    if ( fRequestedTimes[ tileStart ] != true ) {
+		fRequestedTimes[ tileStart ] = true ;
+		fetcher.fetch( dataPath, handler, error, tileStart );	
+	    }
+	}
+
+    }    
+
+
+    function snapBound ( time, bucketSize ) {
+	return Math.floor( time / bucketSize ) * bucketSize;
+    }
+
+    function makePath ( dataSource, type, tileTime ) {
+	var result = '/data/' + dataSource + ':' + type + ':' + tileTime + '.tile';
+	return result;
+    }
+
+
+
+};
+
+var ScatterPlot = new function ( ) {
+    var DEFER = Promise.resolve(true);
+    return constructor;
+
+    function constructor ( root, start, end ) {
+
+	var self = init( root, start, end );
+
+	return self;
+    }
+
+    function init ( fRoot, fStart, fEnd ) {
 	var self = {};
 
 	var fDoZoomY     = false;
@@ -89,7 +270,8 @@ var View = new function ( ) {
 	var fTranslateX  = 0;
 	var fScaleY      = 1;
 	var fTranslateY  = 0;
-	var fZoom = d3.behavior.zoom();
+	var fZoom        = d3.behavior.zoom();
+	var fListeners   = [];
 
 	d3.select(fRoot).call(fZoom);
         fZoom
@@ -98,9 +280,15 @@ var View = new function ( ) {
 	
 	initZoomY();
 
-	self.doDraw = doDraw;
+	self.doDraw      = doDraw;
+	self.addListener = addListener;
 
 	return self;
+
+
+	function addListener ( callback ) {
+	    fListeners.push( callback );
+	}
 
 	function initZoomY ( ) {
 	    var checkbox = fRoot.querySelector( "#zoom-y" );
@@ -124,6 +312,16 @@ var View = new function ( ) {
 	    }
 	}
 
+	function triggerEvents ( ) {
+	    DEFER.then( triggerEventsWorker );
+	}
+
+	function triggerEventsWorker ( ) {
+	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
+		fListeners[i]( self );
+	    }
+	}
+	
 	function doZoom ( ) {
 	    var translate = fZoom.translate();
 	    var scale     = fZoom.scale();
@@ -138,22 +336,21 @@ var View = new function ( ) {
 		fTranslateX = translate[0];
 	    }
 
-	    fViz.schudleDraw( );
+	    triggerEvents();
 	}
 
-	function doDraw ( gl, guffers, glVars, pointsCount, 
-			  start, end, valueMin, valueMax) {
+	function doDraw ( gl, guffers, glVars, 
+			  valueMin, valueMax, data ) {
 	    var elementBox = fRoot.getBoundingClientRect();
 	    var top        = fRoot.offsetTop;
 	    var left       = fRoot.offsetLeft;
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
 
-
-	    doGlDraw( gl, guffers, glVars, pointsCount, 
+	    doGlDraw( gl, guffers, glVars, 
 		      fTranslateX, fTranslateY, fScaleX, fScaleY,
-		      start, end, valueMin, valueMax, 
-		      top, left, width, height );
+		      fStart, fEnd, valueMin, valueMax, 
+		      top, left, width, height, data );
 
 	}
     }
@@ -165,10 +362,9 @@ var View = new function ( ) {
 var Viz = new function ( ) {
     return constructor;
 
-    function constructor ( root, start, end, plots ) {
+    function constructor ( root, fetcher ) {
 	var canvas  = root.querySelector( "#chart" );
-	var gl = canvas.getContext("webgl");
-	//var plotElment = root.querySelector( "#plot-svg" );
+	var gl      = canvas.getContext("webgl");
 
 	var width  = canvas.clientWidth;
 	var height = canvas.clientHeight;
@@ -181,48 +377,85 @@ var Viz = new function ( ) {
         gl.enable(gl.DEPTH_TEST);           // Enable depth testing
         gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
 
-	var data = [];
-	var drawSchulded = false;
-	var views = [];
-
-
-	var self = init( data, root, canvas, gl, buffers, glVars, start, end, drawSchulded, width, height, views );
-
-	for ( var i = 0 ; i < plots.length ; i++ ) {
-	    var element = root.querySelector( "#" + plots[i] );
-	    views.push( new View ( element, self ) ); 
-	}
-
+	var self = init( root, fetcher, canvas, gl, buffers, glVars, width, height );
 
 	return self;
     }
 
-    function init ( fData, fRoot, fCanvas, fGl, fBuffers, fGlVars, fStart, fEnd, fDrawSchulded, fWidth, fHeight, fViews ) {
+    function init ( fRoot, fFetcher, fCanvas, fGl, fBuffers, fGlVars, fWidth, fHeight ) {
 	var self = { };
-	self.updateGraph = updateGraph;
-	self.schudleDraw = schudleDraw;
+	self.addView = addView;
 
-	var fValueMin    = -1500;
-	var fValueMax    = 1500;
-	var fMaxPoints   = Math.pow(10, 6);
-	var fPointsCount = 0;
-	var fDataArray   = new Float32Array(fMaxPoints*2);
+	var fSourceKeys    = [];
+	var fDataSources   = {};
+	var fSourceBuffers = {};
+	var fViewsBySource = {};
+	var fDrawSchulded  = false;
+	var fViews         = [];
+	var fValueMin      = undefined;
+	var fValueMax      = undefined;
 
 	return self;
 
-	function updateGraph ( data ) {
-	    var buffer = loadBuffer( data );
-	    addData( buffer );
-	    	
-	    var results = 
-		plotPoints([buffer], fGl, fBuffers, fGlVars,
-			   fMaxPoints, fPointsCount, fDataArray, fStart, fEnd,
-			   fValueMin, fValueMax);
-		
-	    fDataArray   = results.data;
-	    fPointsCount = results.pointsCount;
-	    fValueMin    = results.minY;
-	    fValueMax    = results.maxY;
+	function addView ( Type, selector, sourceName, typeName,
+			   indexStart, indexEnd, options ) {
+
+	    var plotRoot = fRoot.querySelector( selector );
+
+	    if ( plotRoot === undefined ) {
+		console.log( "could not find element '%s'", selector );
+		return;
+	    }
+
+	    var sourceKey = addData( sourceName, typeName, indexStart, indexEnd );
+
+	    var plot = Type( plotRoot, indexStart, indexEnd );
+	    fViews.push( plot );
+	    fViewsBySource[ sourceKey ].push( plot );
+
+	    plot.addListener( schudleDraw ); //BUG: this is kinda simplistic
+	}
+
+
+	function addData ( sourceName, typeName, start, end ) {
+
+	    var sourceKey = makeSourceKey( sourceName, typeName );
+	    
+	    var source = fDataSources[ sourceKey ];
+
+	    if ( source === undefined ) {
+		source = new RemoteData ( fFetcher, sourceName, typeName, start, end );
+		fDataSources[ sourceKey ] = source;
+		fSourceBuffers[ sourceKey ] = [];
+		fViewsBySource[ sourceKey ] = [];
+		fSourceKeys.push( sourceKey );
+		source.addListener( handleNewData, sourceKey );
+	    }
+
+	    else {
+		source.getRange( start, end );
+	    }
+
+	   return sourceKey;
+	}
+
+	function handleNewData ( tileArrays, sourceKey ) {
+	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
+		var tileArray   = tileArrays[ i ];
+		var tilePointer = loadBuffer( tileArray );
+		var source      = fDataSources[ sourceKey ];
+		var start       = source.getStart();
+		var results     = loadGlBuffer( fGl, tilePointer, start );
+
+		if ( fValueMin === undefined || fValueMin > results.minY )
+		    fValueMin = results.minY;
+
+		if ( fValueMax === undefined || fValueMax < results.maxY )
+		    fValueMax = results.maxY;
+
+		fSourceBuffers[ sourceKey ].push( results );
+	    }
+
 	    schudleDraw();
 	}
 
@@ -238,18 +471,21 @@ var Viz = new function ( ) {
 
 	    resize( fGl );
 
-	    for ( var i = 0 ; i < fViews.length ; i++ ) {
+	    for ( var i = 0 ; i < fSourceKeys.length ; i++ ) {
+		var sourceKey = fSourceKeys[i];
+		var data      = fSourceBuffers[sourceKey];
+		var views     = fViewsBySource[sourceKey];
 
-		fViews[i].doDraw( fGl, fBuffers, fGlVars, fPointsCount, 
-				  fStart, fEnd, fValueMin, fValueMax);
+		for ( var j = 0 ; j < views.length ; j++ ) {
+		    views[j].doDraw( fGl, fBuffers, fGlVars, 
+				  fValueMin, fValueMax, data);
+		}
 	    }
 	}
+    }
 
-	function addData ( buffer ) {
-	    fData.push( buffer );
-	    fData.sort( tileCmp );
-	}
-
+    function makeSourceKey ( sourceName, typeName ) {
+	return sourceName + "\0" + typeName;
     }
 
     function tileCmp ( a, b ) {
@@ -257,77 +493,64 @@ var Viz = new function ( ) {
     }
 
 
-    function plotPoints ( data, gl, buffers, glVars,
-			fMaxPoints, fPointsCount, fDataArray, xMin, xMax, yMin, yMax) {
-	var lastX   = undefined;
-	var lastY   = undefined;
+    function loadGlBuffer ( gl, tilePointer, minTime ) {
 
-	var totalPoints = 0 | 0;
-	var usedPoints  = 0 | 0;
+	var pointsCount = 0 | 0;
 	
-	var minValue = yMin;
-	var maxValue = yMax;
+	var minIndex;
+	var maxIndex;
+	var minValue;
+	var maxValue;
 
-	for ( var i = 0 ; i < data.length ; i++ ) {
+	var iterator = initIterator( tilePointer );
 
-	    var buffer   = data[i];
-	    var iterator = initIterator( buffer );
+	// BUG: this loop should be pulled out to tile creation.
+	while ( nextValue( tilePointer, iterator ) !== 0 ) {
+	    pointsCount++;
 
-	    inner:
-	    while ( nextValue( buffer, iterator ) !== 0 ) {
-		totalPoints++;
-		var value = readValue( iterator );
+	    var time  = readTime( iterator );
 
-		if ( minValue === undefined || minValue > value )
-		    minValue = value;
+	    if ( minIndex === undefined || minIndex > value )
+		minIndex = value;
 
-		if ( maxValue === undefined || maxValue < value )
-		    maxValue = value;
-	    }
-	    finishIterator( iterator );
-	}
-	
-	if ( fPointsCount + totalPoints > fMaxPoints ) {
-	    console.log("toooo many points %d > %d",
-			fPointsCount + totalPoints, fMaxPoints );
+	    if ( maxIndex === undefined || maxIndex < value )
+		maxIndex = value;
 
-	    return;
-	}
+	    var value = readValue( iterator );
 
-	var startOffset = fPointsCount;
-	fPointsCount += totalPoints;
+	    if ( minValue === undefined || minValue > value )
+		minValue = value;
 
-	for ( var i = 0, j = startOffset ; i < data.length ; i++ ) {
-
-	    var buffer   = data[i];
-	    var iterator = initIterator( buffer );
-
-	    for ( ;nextValue( buffer, iterator ) !== 0; j++ ) {
-		var value = readValue( iterator );
-		var time  = readTime( iterator );
-
-		var x = time  - xMin;
-		var y = value;
-		
-		usedPoints++;
-
-		lastX = x;
-		lastY = y;
-		
-		var data_index = j*2;
-		fDataArray[data_index+0] = x;
-		fDataArray[data_index+1] = y;
-	    }
-
-	    finishIterator( iterator );
-
+	    if ( maxValue === undefined || maxValue < value )
+		maxValue = value;
 	}
 
-	gl.bindBuffer(gl.ARRAY_BUFFER, buffers.points);
-	gl.bufferData(gl.ARRAY_BUFFER, fDataArray, gl.STATIC_DRAW);
+	finishIterator( iterator );
+	var glData = new Float32Array(pointsCount*2);
 
-	return {minY:minValue, maxY:maxValue, pointsCount: fPointsCount, 
-		data:fDataArray };
+	var iterator = initIterator( tilePointer );
+
+	for ( var j = 0 ; nextValue( tilePointer, iterator ) !== 0; j += 2 ) {
+	    glData[j]   = readTime( iterator ) - minTime;
+	    glData[j+1] = readValue( iterator );
+	}
+
+	finishIterator( iterator );
+
+	var bufferPointer = gl.createBuffer();
+
+	gl.bindBuffer(gl.ARRAY_BUFFER, bufferPointer);
+	gl.bufferData(gl.ARRAY_BUFFER, glData, gl.STATIC_DRAW);
+
+	return {
+	    mixX          : minIndex,
+	    maxX          : maxIndex,
+	    minY          : minValue, 
+	    maxY          : maxValue, 
+	    pointsCount   : pointsCount, 
+	    bufferPointer : bufferPointer,
+	    tilePointer   : tilePointer,
+	};
     }
 
 
@@ -342,130 +565,33 @@ var Viz = new function ( ) {
 	gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
     }
 
-
-    function initShaders( root, gl ) {
-	var fragmentShader = getShader(root, gl, "fragment-shader");
-	var vertexShader   = getShader(root, gl, "vertex-shader");
-	
-	// Create the shader program
-	
-	var shaderProgram = gl.createProgram();
-	gl.attachShader(shaderProgram, vertexShader);
-	gl.attachShader(shaderProgram, fragmentShader);
-	gl.linkProgram(shaderProgram);
-	
-	// If creating the shader program failed, alert
-	
-	if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
-            console.log("Unable to initialize the shader program.");
-	}
-	
-	gl.useProgram(shaderProgram);
-	
-	var vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-	gl.enableVertexAttribArray(vertexPositionAttribute);
-	
-	return { points : vertexPositionAttribute, shader : shaderProgram }
-
-    }
-
-    function initBuffers( gl, glVars ) {
-	
-	// Create a buffer for the square's vertices.
-	
-	var squareVerticesBuffer = gl.createBuffer();
-	
-	// Select the squareVerticesBuffer as the one to apply vertex
-	// operations to from here out.
-	
-	gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
-	
-	// Now create an array of vertices for the square. Note that the Z
-	// coordinate is always 0 here.
-	
-	var vertices = [
-            1.0,  1.0,
-		-1.0,  1.0,
-            1.0, -1.0,
-		-1.0, -1.0
-	];
-	
-	// Now pass the list of vertices into WebGL to build the shape. We
-	// do this by creating a Float32Array from the JavaScript array,
-	// then use it to fill the current vertex buffer.
-	
-	gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-	
-	// Draw the square by binding the array buffer to the square's vertices
-	// array, setting attributes, and pushing it to GL.
-	
-	gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
-	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
-	
-
-	return { points : squareVerticesBuffer };
-    }
-
-
-
-    function getShader(root, gl, id) {
-	var shaderScript = root.querySelector( "#" + id );
-	
-	if (!shaderScript) {
-            return null;
-	}
-	
-	// Walk through the source element's children, building the
-	// shader source string.
-	
-	var theSource = "";
-	var currentChild = shaderScript.firstChild;
-	
-	while(currentChild) {
-            if (currentChild.nodeType == 3) {
-		theSource += currentChild.textContent;
-            }
-            
-            currentChild = currentChild.nextSibling;
-	}
-	
-	// Now figure out what type of shader script we have,
-	// based on its MIME type.
-	
-	var shader;
-	
-	if (shaderScript.type == "x-shader/x-fragment") {
-            shader = gl.createShader(gl.FRAGMENT_SHADER);
-	} else if (shaderScript.type == "x-shader/x-vertex") {
-            shader = gl.createShader(gl.VERTEX_SHADER);
-	} else {
-            return null;  // Unknown shader type
-	}
-	
-	// Send the source to the shader object
-	
-	gl.shaderSource(shader, theSource);
-	
-	// Compile the shader program
-	
-	gl.compileShader(shader);
-	
-	// See if it compiled successfully
-	
-	if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            console.log("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
-            return null;
-	}
-	
-	return shader;
-    }
-
 }
 
 
-function doGlDraw ( gl, glBuffers, glVars, pointsCount,
+function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
+
+    var startTime = startDate.getTime();
+    var endTime   = endDate.getTime();
+
+    var fetcher = new DataFetcher ( );
+
+    var viz = Viz( root, fetcher );
+
+    viz.addView( ScatterPlot, "#plot1",
+		 sourceName, typeName, startTime, endTime,
+		 {  } );
+
+    viz.addView( ScatterPlot, "#plot2",  
+		 sourceName, typeName, startTime, endTime,
+		 {  } );
+
+    return viz;
+}
+
+
+function doGlDraw ( gl, glBuffers, glVars,
 		    fTranslateX, fTranslateY, fScaleX, fScaleY,
-		    xMin, xMax, yMin, yMax, top, left, width, height ) {
+		    xMin, xMax, yMin, yMax, top, left, width, height, data ) {
 
 
     var glWidth  = gl.canvas.clientWidth;
@@ -508,9 +634,6 @@ function doGlDraw ( gl, glBuffers, glVars, pointsCount,
     vec3.set(translation, 0, yMin, 0);
     mat4.translate(matrix, matrix, translation);
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, glBuffers.points);
-    gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
-
     var pUniform = gl.getUniformLocation(glVars.shader, "uPMatrix");
     gl.uniformMatrix4fv(pUniform, false, perspectiveMatrix);
 
@@ -533,83 +656,133 @@ function doGlDraw ( gl, glBuffers, glVars, pointsCount,
     var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
     gl.uniform1f(yMinLoc, yMinClip);
 
-    gl.drawArrays(gl.POINTS, 0, pointsCount);
+    for ( var i = 0 ; i < data.length ; i++ ) {
+	var info = data[i];
+	gl.bindBuffer(gl.ARRAY_BUFFER, info.bufferPointer);
+	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
+
+	gl.drawArrays(gl.POINTS, 0, info.pointsCount);
+    }
+
     return;
 }
 
-var doFetch = new function () {
-    var queue       = [ ];
-    var outstanding = 0;
-    var MAX = 10;
 
-    return doFetch;
 
-    function doFetch ( file, handler ) {
-	if ( outstanding >= MAX )
-	    queue.push( [file, handler] );
 
-	else
-	    doFetchWorker( file, handler );
+function initShaders( root, gl ) {
+    var fragmentShader = getShader(root, gl, "fragment-shader");
+    var vertexShader   = getShader(root, gl, "vertex-shader");
+    
+    // Create the shader program
+    
+    var shaderProgram = gl.createProgram();
+    gl.attachShader(shaderProgram, vertexShader);
+    gl.attachShader(shaderProgram, fragmentShader);
+    gl.linkProgram(shaderProgram);
+    
+    // If creating the shader program failed, alert
+    
+    if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+        console.log("Unable to initialize the shader program.");
     }
+    
+    gl.useProgram(shaderProgram);
+    
+    var vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+    gl.enableVertexAttribArray(vertexPositionAttribute);
+    
+    return { points : vertexPositionAttribute, shader : shaderProgram }
 
-    function done () {
-	outstanding--;
-	if ( outstanding < MAX && queue.length > 0 )  {
-	    var next = queue.shift();
-	    doFetchWorker( next[0], next[1] );
-	}
-    }
+}
 
-    function doFetchWorker ( file, handler ) {
-	outstanding++;
-	requestedTimes[ file ] = true;
-	fetch(file)  
-	    .then( function(response) { 
-		if (response.status !== 200) {  
-		    console.log('Looks like there was a problem. Status Code: ' +  
-				response.status);
-		    done();
-		    return;  
-		}
+function initBuffers( gl, glVars ) {
+    
+    // Create a buffer for the square's vertices.
+    
+    var squareVerticesBuffer = gl.createBuffer();
+    
+    // Select the squareVerticesBuffer as the one to apply vertex
+    // operations to from here out.
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
+    
+    // Now create an array of vertices for the square. Note that the Z
+    // coordinate is always 0 here.
+    
+    var vertices = [
+        1.0,  1.0,
+	    -1.0,  1.0,
+        1.0, -1.0,
+	    -1.0, -1.0
+    ];
+    
+    // Now pass the list of vertices into WebGL to build the shape. We
+    // do this by creating a Float32Array from the JavaScript array,
+    // then use it to fill the current vertex buffer.
+    
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+    
+    // Draw the square by binding the array buffer to the square's vertices
+    // array, setting attributes, and pushing it to GL.
+    
+    gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
+    gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
+    
 
-		response.arrayBuffer()
-		    .then(finish)
-		    .catch(function(err) {
-			done();
-			console.log("processing array buffer for %s:",file,  err);
-		    });  
-	    } )  
-	    .catch(function(err) {
-		done();
-		console.log('Fetch Error :-S', err);  
-	    });
-
-	function finish ( data ) {
-	    done();
-	    handler(data);
-	}
-    }
+    return { points : squareVerticesBuffer };
 }
 
 
-function loadGraph ( root, source, type, startDate, endDate ) {
 
-    var startTime = startDate.getTime();
-    var endTime   = endDate.getTime();
+function getShader(root, gl, id) {
+    var shaderScript = root.querySelector( "#" + id );
     
-
-    var viz = Viz( root, startTime, endTime, [ "time-plot" ] );
-
-    getMyData( startTime, endTime );
-
-    return viz;
-
-    function getMyData ( startTime, endTime ) {
-	if ( startTime != 0 ) //BUG: wont work for epoc tile
-	    getData( source, type, startTime, endTime, handleData );
+    if (!shaderScript) {
+        return null;
     }
-
-    function handleData ( tile ) {
-	viz.updateGraph( tile );
+    
+    // Walk through the source element's children, building the
+    // shader source string.
+    
+    var theSource = "";
+    var currentChild = shaderScript.firstChild;
+    
+    while(currentChild) {
+        if (currentChild.nodeType == 3) {
+	    theSource += currentChild.textContent;
+        }
+        
+        currentChild = currentChild.nextSibling;
     }
+    
+    // Now figure out what type of shader script we have,
+    // based on its MIME type.
+    
+    var shader;
+    
+    if (shaderScript.type == "x-shader/x-fragment") {
+        shader = gl.createShader(gl.FRAGMENT_SHADER);
+    } else if (shaderScript.type == "x-shader/x-vertex") {
+        shader = gl.createShader(gl.VERTEX_SHADER);
+    } else {
+        return null;  // Unknown shader type
+    }
+    
+    // Send the source to the shader object
+    
+    gl.shaderSource(shader, theSource);
+    
+    // Compile the shader program
+    
+    gl.compileShader(shader);
+    
+    // See if it compiled successfully
+    
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        console.log("An error occurred compiling the shaders: " + gl.getShaderInfoLog(shader));
+        return null;
+    }
+    
+    return shader;
 }
