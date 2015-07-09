@@ -252,7 +252,7 @@ var RemoteData = new function ( ) {
 };
 
 var ScatterPlot = new function ( ) {
-    var DEFER = Promise.resolve(true);
+    var sId   = 0;
     return constructor;
 
     function constructor ( root, start, end ) {
@@ -272,6 +272,7 @@ var ScatterPlot = new function ( ) {
 	var fTranslateY  = 0;
 	var fZoom        = d3.behavior.zoom();
 	var fListeners   = [];
+	var fId          = sId++;
 
 	d3.select(fRoot).call(fZoom);
         fZoom
@@ -280,15 +281,49 @@ var ScatterPlot = new function ( ) {
 	
 	initZoomY();
 
+	self.id          = id;
 	self.doDraw      = doDraw;
 	self.addListener = addListener;
+	self.setZoom     = setZoom;
 
 	return self;
+
+	function id ( ) {
+	    return fId;
+	}
 
 
 	function addListener ( callback ) {
 	    fListeners.push( callback );
 	}
+
+
+	function setZoom ( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
+	    var newScale  = fZoom.scale();
+	    var translate = fZoom.translate();
+	    
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+
+	    if ( fDoZoomY === false ) {
+		newScale     *= xScaleChange;
+		translate[0] -= ( width * xTranslateChage ) * newScale;
+		fScaleX       = newScale;
+		fTranslateX   = translate[0];
+	    }
+	    
+	    else {
+		newScale     *= yScaleChange;
+		translate[1] -= ( height * yTranslateChage ) * newScale;
+		fScaleY       = newScale;
+		fTranslateY   = translate[1];
+	    }
+	    
+	    fZoom.scale( newScale );
+	    fZoom.translate( translate );
+	}
+
 
 	function initZoomY ( ) {
 	    var checkbox = fRoot.querySelector( "#zoom-y" );
@@ -312,31 +347,42 @@ var ScatterPlot = new function ( ) {
 	    }
 	}
 
-	function triggerEvents ( ) {
-	    DEFER.then( triggerEventsWorker );
-	}
-
-	function triggerEventsWorker ( ) {
+	function triggerEvents ( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
 	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
-		fListeners[i]( self );
+		fListeners[i]( self, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
 	    }
 	}
-	
+
 	function doZoom ( ) {
 	    var translate = fZoom.translate();
 	    var scale     = fZoom.scale();
 
+	    var xScaleChange    = 1;
+	    var yScaleChange    = 1;
+	    var xTranslateChage = 0;
+	    var yTranslateChage = 0;
+
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+
 	    if ( fDoZoomY === true ) {
+		yScaleChange    = scale/fScaleY;
+		yTranslateChage = (fTranslateY -translate[1])/scale/height;
+
 		fScaleY     = scale;
 		fTranslateY =  translate[1];
 	    }
 	    
 	    else {
+		xScaleChange    = scale/fScaleX;
+		xTranslateChage = (fTranslateX -translate[0])/scale/width;
+
 		fScaleX     = scale;
 		fTranslateX = translate[0];
 	    }
 
-	    triggerEvents();
+	    triggerEvents( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
 	}
 
 	function doDraw ( gl, guffers, glVars, 
@@ -353,6 +399,8 @@ var ScatterPlot = new function ( ) {
 		      top, left, width, height, data );
 
 	}
+
+
     }
 
 
@@ -413,9 +461,21 @@ var Viz = new function ( ) {
 	    fViews.push( plot );
 	    fViewsBySource[ sourceKey ].push( plot );
 
-	    plot.addListener( schudleDraw ); //BUG: this is kinda simplistic
+	    plot.addListener( plotChange );
 	}
 
+	function plotChange ( plot, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
+	    var changedId = plot.id();
+	    for ( var i = 0 ; i < fViews.length ; i++ ) {
+		var current = fViews[ i ];
+		if ( current.id() === changedId )
+		    continue;
+
+		current.setZoom( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
+	    }
+
+	    schudleDraw();
+	}
 
 	function addData ( sourceName, typeName, start, end ) {
 
@@ -471,6 +531,8 @@ var Viz = new function ( ) {
 
 	    resize( fGl );
 
+	    fGl.clear(fGl.COLOR_BUFFER_BIT | fGl.DEPTH_BUFFER_BIT);
+
 	    for ( var i = 0 ; i < fSourceKeys.length ; i++ ) {
 		var sourceKey = fSourceKeys[i];
 		var data      = fSourceBuffers[sourceKey];
@@ -481,6 +543,7 @@ var Viz = new function ( ) {
 				  fValueMin, fValueMax, data);
 		}
 	    }
+
 	}
     }
 
@@ -577,6 +640,7 @@ function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
 
     var viz = Viz( root, fetcher );
 
+    
     viz.addView( ScatterPlot, "#plot1",
 		 sourceName, typeName, startTime, endTime,
 		 {  } );
@@ -585,6 +649,7 @@ function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
 		 sourceName, typeName, startTime, endTime,
 		 {  } );
 
+    
     return viz;
 }
 
@@ -596,8 +661,6 @@ function doGlDraw ( gl, glBuffers, glVars,
 
     var glWidth  = gl.canvas.clientWidth;
     var glHeight = gl.canvas.clientHeight;
-
-    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     var translation = vec3.create();
     var perspectiveMatrix = mat4.create();
