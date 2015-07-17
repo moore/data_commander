@@ -5,78 +5,173 @@
 #include "data_tile.h"
 
 typedef struct {
+  Column *column;
+  double valueFactor;
+  double value;
+} column_t ;
+
+typedef struct {
   size_t   count ;
   uint32_t index ;
-  double   value;
-  double   variance1;
-  double   time;
-  double   value_factor;
-  double   time_factor;
+  uint32_t columnCount;
+  column_t indexColumn;
+  column_t *columns;
+  
 } iterator_t ;
+
 
 extern "C" {
 
-  double readStartTime ( DataTile* messageData ) {
-    // BUG: start time is not the real start time in current tiles!
-    return 
-      pow(10, DataTile_read_valueFactor( messageData )) 
-      * (double)(DataTile_read_times( messageData, 0 ));
+  double readIndexStart ( TableTile* messageData ) {
 
-    //return DataTile_read_startTime( messageData );
+    Column *indexColumn = TableTile_read_indexColumn( messageData );
+    return
+      pow(10, Column_read_valueFactor( indexColumn )) 
+      * (double)(Column_read_min( indexColumn ));
   }
 
-  iterator_t* initIterator ( DataTile* messageData ) {
+  void initColumn ( Column *column, column_t *iterator_column ) {
+    iterator_column->column = column;
 
-    iterator_t* iterator = (iterator_t*)malloc(sizeof(iterator_t));
-    iterator->count     = DataTile_count_values( messageData );
-    iterator->index     = 0;
-    iterator->time      = DataTile_read_startTime( messageData );
-    iterator->value     = DataTile_read_baseValue( messageData );
-    iterator->variance1 = DataTile_read_baseValue( messageData );
+    iterator_column->valueFactor =
+      pow( 10, Column_read_valueFactor( column ) ); 
 
-    iterator->value_factor = pow(10,
-				 DataTile_read_valueFactor( messageData ));
+    iterator_column->value =
+      Column_read_baseValue( column )
+      * iterator_column->valueFactor;
+  }
 
-    // Adjust by 3 to prouce Ms when used
-    iterator->time_factor  = pow(10,
-      DataTile_read_timeFactor( messageData ) + 3);
+  iterator_t* initIterator ( TableTile* messageData ) {
+
+    iterator_t *iterator = (iterator_t*)malloc(sizeof(iterator_t));
+
+    Column *indexColumn = TableTile_read_indexColumn( messageData );
+
+    iterator->count       = Column_count_values( indexColumn );
+    iterator->index       = 0;
+    iterator->columnCount = TableTile_count_columns( messageData );
+
+    initColumn( indexColumn, &(iterator->indexColumn) );
+
+    column_t *columns = (column_t *)malloc( sizeof(column_t) * iterator->columnCount );
+
+    for ( int i = 0 ; i < iterator->columnCount ; i++ ) {
+      Column *col = TableTile_read_columns( messageData, i );
+      initColumn( col, &columns[i] );
+    }
+
+    iterator->columns = columns;
 
     return iterator;
   }
   
-  bool nextValue ( DataTile* messageData, iterator_t* iterator ) {
+  void finishIterator (iterator_t* iterator) {
+    free(iterator->columns);
+    free(iterator);
+  }
+
+  void updateColumn ( column_t *column, uint32_t index ) {
+    column->value = column->value
+      + column->valueFactor * (double)Column_read_values( column->column, index );
+  }
+
+  bool nextValue ( TableTile* messageData, iterator_t* iterator ) {
     
-    if ( iterator->index >= iterator->count )
+    uint32_t index = iterator->index;
+    
+    if ( index >= iterator->count )
       return false;
-
-    iterator->time =  (iterator->time
-		      + iterator->time_factor * (double)DataTile_read_times( messageData, iterator->index ));
-
-    iterator->value = (iterator->value
-		       + iterator->value_factor * (double)DataTile_read_values( messageData, iterator->index ));
-
-    iterator->variance1 =  (iterator->variance1
-		       +  iterator->value_factor * (double)DataTile_read_variance1( messageData, iterator->index ));
+    updateColumn( &iterator->indexColumn, index );
     
+    column_t *columns = iterator->columns;
+
+    for ( int i = 0 ; i < iterator->columnCount ; i++ ) {
+      updateColumn( &columns[i], index );
+    }
 
     iterator->index++;
     return true;
   }
 
 
-  double readValue ( iterator_t* iterator ) {
-    return iterator->value;
+  double readValue ( iterator_t *iterator, uint32_t index ) {
+    double result;
+
+    if ( index == 0 )
+      result = iterator->indexColumn.value;
+
+    else if ( index <= iterator->columnCount )
+      result = iterator->columns[ index - 1 ].value;
+
+    else
+      result = 0;
+
+    return result;
   }
 
-  double readVariance1( iterator_t* iterator ) {
-    return iterator->variance1;
+  uint32_t getColumCount ( iterator_t *iterator ) {
+    return iterator->columnCount + 1;
   }
 
-  double readTime ( iterator_t* iterator ) {
-    return iterator->time;
+  char* getName ( iterator_t *iterator, uint32_t index ) {
+    char *result;
+
+    if ( index == 0 )
+      result = Column_read_name( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = Column_read_name( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
   }
 
-  void finishIterator (iterator_t* iterator) {
-    free(iterator);
+  size_t getNameLength ( iterator_t *iterator, uint32_t index ) {
+    size_t result;
+
+    if ( index == 0 )
+      result = Column_length_name( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = Column_length_name( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
   }
+
+  char* getUnits ( iterator_t *iterator, uint32_t index ) {
+    char *result;
+
+    if ( index == 0 )
+      result = Column_read_units( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = Column_read_units( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
+  }
+
+  size_t getUnitsLength ( iterator_t *iterator, uint32_t index ) {
+    size_t result;
+
+    if ( index == 0 )
+      result = Column_length_units( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = Column_length_units( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
+  }
+
 }
+

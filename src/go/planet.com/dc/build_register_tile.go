@@ -22,7 +22,7 @@ import "unsafe"
 type Register struct {
 	Field         string
 	Satellite     string
-	Timestamp     uint64
+	Timestamp     int64
 	Source_name   string
 	Command_label string
 	Source        string
@@ -76,14 +76,14 @@ func writeTiles ( registers []Register, prefix string ) ( error )  {
 
 	for key, records := range results {
 
-		var BucketSize uint64 = 24 * 60 * 60 * 1000
+		var BucketSize int64 = 24 * 60 * 60 * 1000
 
-		times  := make([]uint64, len(records))
-		values := make([]int64 , len(records))
+		times  := make([]int64, len(records))
+		values := make([]int64, len(records))
 
-		var currnetTileTime uint64  = 0
+		var currnetTileTime int64   = 0
 		var cussrntStart    int     = 0
-		var lastTime        uint64  = 0
+		var lastTime        int64   = 0
 		var lastValue       float64 = 0
 
 		for i, record := range records {
@@ -96,7 +96,7 @@ func writeTiles ( registers []Register, prefix string ) ( error )  {
 				tile, _ := makeTile( times[cussrntStart:i], values[cussrntStart:i], key )
 				cussrntStart = i
 
-				path := prefix + key + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
+				path := prefix + key + ":" + strconv.FormatInt(currnetTileTime, 10) + ".tile"
 
 				writeTile( tile, path )
 				lastValue = 0
@@ -114,43 +114,92 @@ func writeTiles ( registers []Register, prefix string ) ( error )  {
 	return nil
 }
 
-func makeTile ( times []uint64, values []int64, units string ) ([]byte, error) {
 
-	units_c := C.CString(units)
-	defer C.free(unsafe.Pointer(units_c))
+func buildColumn ( name string, units string, values []int64, valueFactor int8) (C.struct_Column_builder) {
+	var builder C.struct_Column_builder
 
-	fmt.Fprintf(os.Stdout, "writing tile of %v with %v entries\n", units, len(values) )
+	// BUG: these should just be passed in as well as basevalue
+	var min int64
+	var max int64
 
-	var builder C.struct_DataTile_builder
+	if len(values) > 0 {
+		min = values[0]
+		max = values[0]
+	} else {
+		min = 0
+		max = 0
+	}
+
+	for _, value := range values {
+		if value > max {
+			max = value
+		}
+
+		if value < min {
+			min = value
+		}
+	}
 
 	builder.prebuilt = false
-	builder.encoding = 0
-	builder.aggregation = 0
-	builder.epoc = 1970
-	builder.startTime = 0
-	builder.timeFactor = -3
-	builder.duration = 24 * 60 * 60 * 1000
-	builder.units.data = units_c
-	builder.units.length = (C.size_t)(len(units))
-	builder.baseValue = 0
-	builder.valueFactor = -3
-	builder.values.data = (*C.int64_t)(unsafe.Pointer(&values[0]))
+
+	// C strings are freed in freeColumn()
+	builder.name.data    = C.CString(name)
+	builder.name.length  = C.size_t(len(name))
+	builder.units.data   = C.CString(units)
+	builder.units.length = C.size_t(len(units))
+	builder.baseValue    = 0
+	builder.valueFactor  = C.int8_t(valueFactor)
+	builder.min          = C.int64_t(min)
+	builder.max          = C.int64_t(max)
+	builder.values.data  = (*C.int64_t)(unsafe.Pointer(&values[0]))
 	builder.values.count = C.size_t(len(values))
-	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
-	builder.times.count = C.size_t(len(times))
-	
-	size := C.compute_DataTile_length(&builder);
+
+	return builder
+}
+
+func freeColumn ( builder C.struct_Column_builder) () {
+	C.free(unsafe.Pointer(builder.name.data))
+	C.free(unsafe.Pointer(builder.units.data))
+}
+
+func makeTile ( times []int64, values []int64, units string ) ([]byte, error) {
+
+	tableType   := "register"
+	tableType_c := C.CString(tableType)
+	defer C.free(unsafe.Pointer(tableType_c))
+
+	fmt.Fprintf(os.Stdout, "writing tile of with %v entries\n", len(times) )
+
+	timeColumn := buildColumn( "time", "ms", times, 0 )
+	defer freeColumn( timeColumn )
+
+	valueColumn := buildColumn( "value", units, values, -3 )
+	defer freeColumn( valueColumn )
+
+	secondaryColumns := []*C.struct_Column_builder{ &valueColumn }
+
+	var builder C.struct_TableTile_builder
+
+	builder.prebuilt = false
+
+	builder.tableType.data   = tableType_c
+	builder.tableType.length = (C.size_t)(len(tableType))
+	builder.indexColumn      = &timeColumn
+	builder.columns.data     = 
+		(**C.struct_Column_builder)(unsafe.Pointer(&secondaryColumns[0]))
+	builder.columns.count    = C.size_t(len(secondaryColumns))
+
+	size := C.compute_TableTile_length(&builder);
 	result := make([]byte, size);
 	buffer := (*C.char)(unsafe.Pointer(&result[0]))
 
-	wrote := C.build_DataTile(buffer, size, &builder)
-	
+	wrote := C.build_TableTile(buffer, size, &builder)
+
 	if wrote == 0 {
 		return nil, errors.New("Could not write message.")
 	}
 	
 	return result, nil
-
 }
 
 

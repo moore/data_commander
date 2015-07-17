@@ -18,7 +18,7 @@ MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readVariance1', '_readStartTime', '_readValue', '_readTime', '_initIterator', '_nextValue', '_finishIterator']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
 
 .PHONY: all clean distclean 
 all:: js
@@ -28,7 +28,7 @@ ${BUILD_JS_DIR}:
 
 messages : ${MESSAGE_HEADDERS}
 
-js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS}
+js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS} $(SOURCES)
 	$(EMCC) -Os $(EMFLAGS) $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
 
 ${HTDOCS}: js

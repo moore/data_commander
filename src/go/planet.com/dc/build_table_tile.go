@@ -1,7 +1,6 @@
 package main
 
 import (
-	//"bufio"
 	"fmt"
 	"os"
 	"strconv"
@@ -21,7 +20,7 @@ import "C"
 import "unsafe"
 
 type Scene struct {
-	Satellite string
+	Satellite uint16
 	Timestamp uint64
 	Lat       float64
 	Lon       float64
@@ -54,17 +53,17 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 
 	scenes := make([]Scene, len(rawCSVdata))
 
-         // sanity check, display to standard output
-         for i, each := range rawCSVdata {
-		 timestamp, _ := strconv.ParseUint(each[0], 10, 64)
-		 satellite    := each[1]
-		 lat      , _ := strconv.ParseFloat(each[2], 32)
-		 lon      , _ := strconv.ParseFloat(each[3], 32)
+	// sanity check, display to standard output
+	for i, each := range rawCSVdata {
+		timestamp, _ := strconv.ParseUint(each[0], 10, 64)
+		satellite, _ := strconv.ParseUint(each[1], 16, 16)
+		lat      , _ := strconv.ParseFloat(each[2], 32)
+		lon      , _ := strconv.ParseFloat(each[3], 32)
 
-		 scenes[i].Timestamp = timestamp * 1000
-		 scenes[i].Satellite = satellite
-		 scenes[i].Lat       = (float64)(lat)
-		 scenes[i].Lon       = (float64)(lon)
+		scenes[i].Timestamp = timestamp * 1000
+		scenes[i].Satellite = uint16(satellite)
+		scenes[i].Lat       = (float64)(lat)
+		scenes[i].Lon       = (float64)(lon)
 
          }
 
@@ -83,13 +82,13 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 
 	var BucketSize uint64 = 24 * 60 * 60 * 1000
 
-	times  := make([]uint64, len(scenes))
-	lats   := make([]int64 , len(scenes))
-	lons   := make([]int64 , len(scenes))
+	times  := make([]int64, len(scenes))
+	lats   := make([]int64, len(scenes))
+	lons   := make([]int64, len(scenes))
 
 	var currnetTileTime uint64  = 0
 	var cussrntStart    int     = 0
-	var lastTime        uint64  = 0
+	var lastTime        int64   = 0
 	var lastLat         float64 = 0
 	var lastLon         float64 = 0
 
@@ -99,7 +98,7 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 		if currnetTileTime == 0 {
 			currnetTileTime = tileTime
 		} else if currnetTileTime != tileTime {
-			tile, _ := makeTile( times[cussrntStart:i], lats[cussrntStart:i], lons[cussrntStart:i], prefix )
+			tile, _ := makeTile( times[cussrntStart:i], lats[cussrntStart:i], lons[cussrntStart:i] )
 			cussrntStart = i
 
 			path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
@@ -111,16 +110,16 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 			currnetTileTime = tileTime
 		}
 
-		times[i] = record.Timestamp - lastTime 
+		times[i] = int64(record.Timestamp) - lastTime 
 		lats[i]  = (int64)((record.Lat - lastLat) * math.Pow(10, 6))
 		lons[i]  = (int64)((record.Lon - lastLon) * math.Pow(10, 6))
 
-		lastTime = record.Timestamp
+		lastTime = int64(record.Timestamp)
 		lastLat  = record.Lat
 		lastLon  = record.Lon
 	}
 
-	tile, _ := makeTile( times[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:], prefix )
+	tile, _ := makeTile( times[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:] )
 	path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
 
 	writeTile( tile, path )
@@ -129,45 +128,93 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 	return nil
 }
 
-func makeTile ( times []uint64, values []int64, variance1 []int64, units string ) ([]byte, error) {
+func buildColumn ( name string, units string, values []int64, valueFactor int8) (C.struct_Column_builder) {
+	var builder C.struct_Column_builder
 
-	units_c := C.CString(units)
-	defer C.free(unsafe.Pointer(units_c))
+	// BUG: these should just be passed in as well as basevalue
+	var min int64
+	var max int64
 
-	fmt.Fprintf(os.Stdout, "writing tile of %v with %v entries\n", units, len(values) )
+	if len(values) > 0 {
+		min = values[0]
+		max = values[0]
+	} else {
+		min = 0
+		max = 0
+	}
 
-	var builder C.struct_DataTile_builder
+	for _, value := range values {
+		if value > max {
+			max = value
+		}
+
+		if value < min {
+			min = value
+		}
+	}
 
 	builder.prebuilt = false
-	builder.encoding = 0
-	builder.aggregation = 0
-	builder.epoc = 1970
-	builder.startTime = 0
-	builder.timeFactor = -3
-	builder.duration = 24 * 60 * 60 * 1000
-	builder.units.data = units_c
-	builder.units.length = (C.size_t)(len(units))
-	builder.baseValue = 0
-	builder.valueFactor = -6
-	builder.values.data = (*C.int64_t)(unsafe.Pointer(&values[0]))
+
+	builder.name.data    = C.CString(name)
+	builder.name.length  = C.size_t(len(name))
+	builder.units.data   = C.CString(units)
+	builder.units.length = C.size_t(len(units))
+	builder.baseValue    = 0
+	builder.valueFactor  = C.int8_t(valueFactor)
+	builder.min          = C.int64_t(min)
+	builder.max          = C.int64_t(max)
+	builder.values.data  = (*C.int64_t)(unsafe.Pointer(&values[0]))
 	builder.values.count = C.size_t(len(values))
-	builder.variance1.data = (*C.int64_t)(unsafe.Pointer(&variance1[0]))
-	builder.variance1.count = C.size_t(len(variance1))
-	builder.times.data = (*C.uint64_t)(unsafe.Pointer(&times[0]))
-	builder.times.count = C.size_t(len(times))
-	
-	size := C.compute_DataTile_length(&builder);
+
+	return builder
+}
+
+func freeColumn ( builder C.struct_Column_builder) () {
+	C.free(unsafe.Pointer(builder.name.data))
+	C.free(unsafe.Pointer(builder.units.data))
+}
+
+func makeTile ( times []int64, lats []int64, lons []int64 ) ([]byte, error) {
+
+	tableType   := "tychoon"
+	tableType_c := C.CString(tableType)
+	defer C.free(unsafe.Pointer(tableType_c))
+
+	fmt.Fprintf(os.Stdout, "writing tile of with %v entries\n", len(times) )
+
+	timeColumn := buildColumn( "time", "s", times, -3 )
+	defer freeColumn( timeColumn )
+
+	latColumn := buildColumn( "lat", "deg", lats, -6 )
+	defer freeColumn( latColumn )
+
+	lonColumn := buildColumn( "lon", "deg", lons, -6 )
+	defer freeColumn( lonColumn )
+
+	secondaryColumns := []*C.struct_Column_builder{ &latColumn, &lonColumn }
+
+	var builder C.struct_TableTile_builder
+
+	builder.prebuilt = false
+
+	builder.tableType.data = tableType_c
+	builder.tableType.length = (C.size_t)(len(tableType))
+	builder.indexColumn    = &timeColumn
+	// BUG: is this cast even right?
+	builder.columns.data   = (**C.struct_Column_builder)(unsafe.Pointer(&secondaryColumns[0]))
+	builder.columns.count  = C.size_t(len(secondaryColumns))
+
+	size := C.compute_TableTile_length(&builder);
 	result := make([]byte, size);
 	buffer := (*C.char)(unsafe.Pointer(&result[0]))
 
-	wrote := C.build_DataTile(buffer, size, &builder)
-	
+	wrote := C.build_TableTile(buffer, size, &builder)
+
 	if wrote == 0 {
 		return nil, errors.New("Could not write message.")
 	}
 	
 	return result, nil
-
 }
 
 

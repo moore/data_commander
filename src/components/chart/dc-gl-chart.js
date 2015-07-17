@@ -195,17 +195,14 @@ var RemoteData = new function ( ) {
 	}
 
 	function gotData ( dataArray, tileStart ) {
-	    //console.log( "got data %s", tileStart ); //BOOG
 	    fNewData.push( dataArray );
 	    fDataTiles[ tileStart ] = dataArray;
 	    triggerEvents( );
 	}
 
 	function noData ( error, tileStart ) {
-	    /* BOOG
-	    console.log( "Could not get %s %s at %s becouse '%s'",
-			 fSource, fType, tileStart, error );
-	    */
+	    // Errors are allready reported in the newtwork tab
+	    // so we don't bother.
 	    fRequestedTimes[ tileStart ] = false ;
 	}
 
@@ -571,15 +568,15 @@ var Viz = new function ( ) {
 	while ( nextValue( tilePointer, iterator ) !== 0 ) {
 	    pointsCount++;
 
-	    var time  = readTime( iterator );
+	    var time = readValue( iterator, 0 );
 
-	    if ( minIndex === undefined || minIndex > value )
-		minIndex = value;
+	    if ( minIndex === undefined || minIndex > time )
+		minIndex = time;
 
-	    if ( maxIndex === undefined || maxIndex < value )
-		maxIndex = value;
+	    if ( maxIndex === undefined || maxIndex < time )
+		maxIndex = time;
 
-	    var value = readValue( iterator );
+	    var value = readValue( iterator, 1 );
 
 	    if ( minValue === undefined || minValue > value )
 		minValue = value;
@@ -594,8 +591,8 @@ var Viz = new function ( ) {
 	var iterator = initIterator( tilePointer );
 
 	for ( var j = 0 ; nextValue( tilePointer, iterator ) !== 0; j += 2 ) {
-	    glData[j]   = readTime( iterator ) - minTime;
-	    glData[j+1] = readValue( iterator );
+	    glData[j]   = readValue( iterator, 0 ) - minTime;
+	    glData[j+1] = readValue( iterator, 1 );
 	}
 
 	finishIterator( iterator );
@@ -656,8 +653,8 @@ function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
 
 function doGlDraw ( gl, glBuffers, glVars,
 		    fTranslateX, fTranslateY, fScaleX, fScaleY,
-		    xMin, xMax, yMin, yMax, top, left, width, height, data ) {
-
+		    xMin, xMax, yMin, yMax,
+		    top, left, width, height, data ) {
 
     var glWidth  = gl.canvas.clientWidth;
     var glHeight = gl.canvas.clientHeight;
