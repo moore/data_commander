@@ -31,8 +31,75 @@ Polymer({
     },    
 });
 
+function loadMap ( root, sources, startDate, endDate ) {
+
+    var typeName = "";
+
+    var startTime = startDate.getTime();
+    var endTime   = endDate.getTime();
+
+    var fetcher = new DataFetcher ( );
+
+    var viz = Viz( root, fetcher );
+
+    var plot1Data = [];
+
+    for ( var i = 0 ; i < sources.length ; i++ ) {
+	plot1Data.push( {
+	    sourceName : sources[i], 
+	    typeName   : typeName  , 
+	    indexStart : startTime ,
+	    indexEnd   : endTime   ,
+	} );
+
+    }
 
 
+    var plot2Data = [
+	{
+	    sourceName : sourceName, 
+	    typeName   : "batt voltages set"  , 
+	    indexStart : startTime ,
+	    indexEnd   : endTime   ,
+	}
+    ];
+
+    viz.addView( ScatterPlot, "#plot1",
+		 plot1Data,
+		 {  } );
+    /*
+    viz.addView( ScatterPlot, "#plot2",  
+		 plot2Data,
+		 {  } );
+    */
+    
+    return viz;
+}
+
+/*
+function loadMap ( root, sources, startDate, endDate ) {
+
+    var startTime = startDate.getTime();
+    var endTime   = endDate.getTime();
+    
+
+    var viz = Viz( root, sources, "example map", startTime, endTime );
+
+    for ( var i = 0 ; i < sources.length ; i++ ) {
+	getMyData( sources[i], startTime, endTime );
+    }
+
+    return viz;
+
+    function getMyData ( source, startTime, endTime ) {
+	if ( startTime != 0 ) //BUG: wont work for epoc tile
+	    getData( source, startTime, endTime, viz.updateGraph );
+    }
+
+}
+*/
+
+/*
 function snapBound ( time, bucketSize ) {
     return Math.floor( time / bucketSize ) * bucketSize;
 }
@@ -391,25 +458,5 @@ var doFetch = new function () {
     }
 }
 
-
-function loadMap ( root, sources, startDate, endDate ) {
-
-    var startTime = startDate.getTime();
-    var endTime   = endDate.getTime();
-    
-
-    var viz = Viz( root, sources, "example map", startTime, endTime );
-
-    for ( var i = 0 ; i < sources.length ; i++ ) {
-	getMyData( sources[i], startTime, endTime );
-    }
-
-    return viz;
-
-    function getMyData ( source, startTime, endTime ) {
-	if ( startTime != 0 ) //BUG: wont work for epoc tile
-	    getData( source, startTime, endTime, viz.updateGraph );
-    }
-
-}
+*/
 }
