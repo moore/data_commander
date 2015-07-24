@@ -395,6 +395,10 @@ var Viz = new function ( ) {
         gl.enable(gl.DEPTH_TEST);           // Enable depth testing
         gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
 
+	// BUG: do I really want this?
+	gl.enable(gl.BLEND);
+	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
 	var self = init( root, fetcher, canvas, gl, buffers, glVars, width, height );
 
 	return self;
@@ -575,6 +579,7 @@ var Viz = new function ( ) {
 
 	    if ( maxValue === undefined || maxValue < value )
 		maxValue = value;
+
 	}
 
 	finishIterator( iterator );
