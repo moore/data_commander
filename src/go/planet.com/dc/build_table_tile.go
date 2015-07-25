@@ -71,6 +71,7 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 }
 
 
+
 func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 	sort.Sort(ByTimestamp(scenes))
 

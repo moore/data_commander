@@ -4,20 +4,87 @@
 
 <script src="/libs/d3.min.js"></script>
 <script src="/libs/topojson.min.js"></script>
+<script src="/libs/d3.min.js"></script>
+<script src="/libs/gl-matrix2-min.js"></script>
 
 <dom-module id="dc-map">
   <template>
     <link rel="stylesheet" href="dc-map.css">
+    <script id="fragment-shader" type="x-shader/x-fragment">
+      precision highp float;
+      varying float ignorPoint;
+
+      void main(void) {
+        if ( ignorPoint > 0.5 )
+           discard;
+
+        // Two aproches to making circles.
+        // One could also use a texture.
+        //vec2 pt = gl_PointCoord - vec2(0.5);
+        //if (pt.x*pt.x+pt.y*pt.y > 0.25)
+        //   discard;
+
+        //if ( length( gl_PointCoord - vec2(0.5) ) > 0.5 )
+        //   discard;
+
+        gl_FragColor = vec4( 0.0, 1.0, 0.0, 0.5);
+      }
+    </script>
+    <script id="vertex-shader" type="x-shader/x-vertex">
+      precision highp float;
+      attribute vec2 aVertexPosition;
+    
+      uniform mat4  uMVMatrix;
+      uniform mat4  uPMatrix;
+      uniform float xMax;
+      uniform float xMin;
+      uniform float yMax;
+      uniform float yMin;
+      
+      varying float ignorPoint;
+
+      
+      void main(void) {
+        gl_PointSize = 2.0;
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0, 1.0);
+
+        if (
+              (gl_Position.y > yMax)
+           || (gl_Position.y < yMin)
+           || (gl_Position.x > xMax)
+           || (gl_Position.x < xMin)
+	   ) {
+	   ignorPoint = 1.0;
+	} else {
+          ignorPoint = 0.0;
+        }
+
+      }
+    </script>
+
     <p>
       This is pics of type "<span>{{source}}</span>".
       <div id="container" style="position:relative">
 	<svg     width="950" height="500" id="map-svg" style="position:absolute">
 	</svg>
-	<canvas  width="950" height="500" id="chart"   style="transform: translateZ(0)">
-	</canvas>
+    <div class="gl-view">
+      <canvas class="gl-view" id="chart" width="1000" height="1050"  style="transform: translateZ(0)">
+      </canvas>
+      <div id="plot1">
+	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
+	<svg width="1000" height="750" class="sub-graph" id="plot-svg">
+	</svg>
       </div>
+      <div id="plot2">
+	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
+	<svg width="1000" height="300" class="sub-graph" id="plot-svg">
+	</svg>
+      </div>
+    </div>
+   </div>
   </template>
-    <script rel="import" src="dc-map.js"></script>
+  <script rel="import" src="dc-libs.js"></script>
+  <script rel="import" src="dc-map.js"></script>
 </dom-module>
 
 

@@ -33,8 +33,56 @@ Polymer({
 
 function loadMap ( root, sources, startDate, endDate ) {
 
-    var typeName = "";
+    var typeName = "scene";
 
+
+    var startTime = startDate.getTime();
+    var endTime   = endDate.getTime();
+
+    var fetcher = new DataFetcher ( );
+
+    var viz = Viz( root, fetcher );
+
+
+    var plot1Data = [];
+
+    for ( var i = 0 ; i < sources.length ; i++ ) {
+	plot1Data.push( {
+	    sourceName : sources[i] , 
+	    typeName   : typeName   , 
+	    indexStart : startTime  ,
+	    indexEnd   : endTime    ,
+	    xRange     : [-180, 180],
+	    yRange     : [-90 , 90 ],
+	    projection : [2, 1]     ,
+	} );
+
+    }
+
+
+    var plot2Data = [
+	{
+	    sourceName : "0906:bus2", 
+	    typeName   : "batt voltages set"  , 
+	    indexStart : startTime ,
+	    indexEnd   : endTime   ,
+	    projection : [0, 1]    ,
+	}
+    ];
+
+    viz.addView( ScatterPlot, "#plot1",
+		 plot1Data,
+		 { lockZoomXY : true } );
+
+    viz.addView( ScatterPlot, "#plot2",  
+		 plot2Data,
+		 {  } );
+
+    
+    return viz;
+
+
+/*
     var startTime = startDate.getTime();
     var endTime   = endDate.getTime();
 
@@ -67,7 +115,7 @@ function loadMap ( root, sources, startDate, endDate ) {
     viz.addView( ScatterPlot, "#plot1",
 		 plot1Data,
 		 {  } );
-    /*
+    
     viz.addView( ScatterPlot, "#plot2",  
 		 plot2Data,
 		 {  } );

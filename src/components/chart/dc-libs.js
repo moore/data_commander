@@ -111,9 +111,28 @@ var DataFetcher = new function ( ) {
 
 var RemoteData = new function ( ) {
     var BUCKET_SIZE = 24 * 60 * 60 * 1000;
-    return init;
+    return factory;
 
-    function init ( fFetcher, fSource, fType, fStart, fEnd, fProjection ) {
+    function factory ( fFetcher, fSource, fType, fStart, fEnd, xRange, yRange, projection ) {
+
+	var fXRange;
+	var fYRange;
+
+	if ( xRange !== undefined )
+	    fXRange = xRange.slice(0);
+
+	else
+	    fXRange = [ fStart, fEnd ];
+
+	if ( yRange !== undefined )
+	    fYRange = yRange.slice(0);
+
+	var fProjection = projection.slice(0);
+
+	return init( fFetcher, fSource, fType, fStart, fEnd, fXRange, fYRange, fProjection );
+    }
+
+    function init ( fFetcher, fSource, fType, fStart, fEnd, fXRange, fYRange, fProjection ) {
 	var fBatcher         = new BatchAction ( );
 	var self             = {};
 	var fRequestedTimes  = {};
@@ -129,6 +148,8 @@ var RemoteData = new function ( ) {
 	self.getRange      = getRange;
 	self.getStart      = getStart;
 	self.getEnd        = getEnd;
+	self.getMin        = getMin;
+	self.getMax        = getMax;
 	self.getProjection = getProjection;
 
 	getData( fFetcher, fSource, fType, fStart, fEnd, gotData, noData );
@@ -149,11 +170,25 @@ var RemoteData = new function ( ) {
 	}
 
 	function getStart ( ) {
-	    return fStart;
+	    return fXRange[0];
 	}
 
 	function getEnd ( ) {
-	    return fEnd;
+	    return fXRange[1];
+	}
+
+	function getMin ( ) {
+	    if ( fYRange === undefined )
+		return undefined;
+
+	    return fYRange[0];
+	}
+
+	function getMax ( ) {
+	    if ( fYRange === undefined )
+		return undefined;
+
+	    return fYRange[1];
 	}
 
 	function getProjection ( ) {
@@ -229,9 +264,19 @@ var RemoteData = new function ( ) {
 
 var ScatterPlot = new function ( ) {
     var sId   = 0;
-    return init;
+    return factory;
 
-    function init ( fRoot ) {
+    function factory ( fRoot, options ) {
+
+	var fLockZoom = false;
+
+	if ( options.lockZoomXY === true )
+	    fLockZoom = true;
+
+	return init( fRoot, fLockZoom );
+    }
+
+    function init ( fRoot, fLockZoom ) {
 	var self = {};
 
 	var fDoZoomY     = false;
@@ -275,14 +320,14 @@ var ScatterPlot = new function ( ) {
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
 
-	    if ( fDoZoomY === false ) {
+	    if ( fLockZoom === true || fDoZoomY === false ) {
 		newScale     *= xScaleChange;
 		translate[0] -= ( width * xTranslateChage ) * newScale;
 		fScaleX       = newScale;
 		fTranslateX   = translate[0];
 	    }
 	    
-	    else {
+	    if ( fLockZoom === true || fDoZoomY === true ) {
 		newScale     *= yScaleChange;
 		translate[1] -= ( height * yTranslateChage ) * newScale;
 		fScaleY       = newScale;
@@ -335,7 +380,7 @@ var ScatterPlot = new function ( ) {
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
 
-	    if ( fDoZoomY === true ) {
+	    if ( fLockZoom === true || fDoZoomY === true ) {
 		yScaleChange    = scale/fScaleY;
 		yTranslateChage = (fTranslateY -translate[1])/scale/height;
 
@@ -343,7 +388,7 @@ var ScatterPlot = new function ( ) {
 		fTranslateY =  translate[1];
 	    }
 	    
-	    else {
+	    if ( fLockZoom === true || fDoZoomY === false ) {
 		xScaleChange    = scale/fScaleX;
 		xTranslateChage = (fTranslateX -translate[0])/scale/width;
 
@@ -433,14 +478,14 @@ var Viz = new function ( ) {
 		return;
 	    }
 
-
-	    var plot = Type( plotRoot );
+	    var plot = Type( plotRoot, options );
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
 		var source    = sources[i];
 		var sourceKey = addData( source.sourceName, source.typeName, 
 					 source.indexStart, source.indexEnd,
+					 source.xRange, source.yRange,
 					 source.projection);
 
 		fViewsBySource[ sourceKey ].push( plot );
@@ -462,14 +507,14 @@ var Viz = new function ( ) {
 	    schudleDraw();
 	}
 
-	function addData ( sourceName, typeName, start, end, projection ) {
+	function addData ( sourceName, typeName, start, end, xRange, yRange, projection ) {
 
 	    var sourceKey = makeSourceKey( sourceName, typeName );
 	    
 	    var source = fDataSources[ sourceKey ];
 
 	    if ( source === undefined ) {
-		source = new RemoteData ( fFetcher, sourceName, typeName, start, end, projection );
+		source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection );
 		fDataSources[ sourceKey ] = source;
 		fSourceBuffers[ sourceKey ] = [];
 		fViewsBySource[ sourceKey ] = [];
@@ -528,11 +573,19 @@ var Viz = new function ( ) {
 		var source    = fDataSources[sourceKey];
 		var indexMin  = source.getStart();
 		var indexMax  = source.getEnd();
+		var valueMin  = source.getMin();
+		var valueMax  = source.getMax();
+
+		if ( valueMin === undefined )
+		    valueMin = fValueMin;
+
+		if ( valueMax === undefined )
+		    valueMax = fValueMax;
 
 		for ( var j = 0 ; j < views.length ; j++ ) {
 		    views[j].doDraw( fGl, fBuffers, fGlVars, 
 				     indexMin, indexMax,
-				     fValueMin, fValueMax, 
+				     valueMin, valueMax, 
 				     data);
 		}
 	    }
@@ -588,8 +641,8 @@ var Viz = new function ( ) {
 	var iterator = initIterator( tilePointer );
 
 	for ( var j = 0 ; nextValue( tilePointer, iterator ) !== 0; j += 2 ) {
-	    glData[j]   = readValue( iterator, 0 ) - minTime;
-	    glData[j+1] = readValue( iterator, 1 );
+	    glData[j]   = readValue( iterator, projection[0] ) - minTime;
+	    glData[j+1] = readValue( iterator, projection[1] );
 	}
 
 	finishIterator( iterator );

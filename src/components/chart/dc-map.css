@@ -8,3 +8,33 @@ path {
 #container {
     overflow : hidden;
 }
+
+body {
+  font: 15px sans-serif;
+}
+
+#chart {
+    transform : translateZ(0);
+    position  : absolute;
+}
+
+#zoom-chooser {
+    position  : absolute;
+    z-index    : 100;
+    transform : translateZ(0);
+    color     : white;
+}
+
+.sub-graph {
+    transform : translateZ(0);
+    display   : block;
+    border    : 1px solid blue;
+}
+
+.gl-view {
+    background-color : black ;
+    overflow : hidden ;
+    float : left;
+    position  : relative;
+
+}
