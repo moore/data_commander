@@ -47,27 +47,24 @@ function loadMap ( root, sources, startDate, endDate ) {
     var plot1Data = [];
 
     for ( var i = 0 ; i < sources.length ; i++ ) {
-	plot1Data.push( {
-	    sourceName : sources[i] , 
-	    typeName   : typeName   , 
-	    indexStart : startTime  ,
-	    indexEnd   : endTime    ,
-	    xRange     : [-180, 180],
-	    yRange     : [-90 , 90 ],
-	    projection : [2, 1]     ,
-	} );
+	var sourceKey = viz.addData( sources[i],  typeName, 
+				     startTime, endTime, 
+				     [2, 1],
+				     {
+					 xRange : [-180, 180],
+					 yRange : [-90 , 90 ],
+				     } );
+	plot1Data.push( sourceKey );
 
     }
 
 
     var plot2Data = [
-	{
-	    sourceName : "0906:bus2", 
-	    typeName   : "batt voltages set"  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	    projection : [0, 1]    ,
-	}
+	viz.addData( "0906:bus2", "batt voltages set",
+		     startTime, endTime, 
+		     [0, 1],
+		     { } ),
+		     
     ];
 
     viz.addView( ScatterPlot, "#plot1",

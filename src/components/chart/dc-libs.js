@@ -452,7 +452,9 @@ var Viz = new function ( ) {
     function init ( fRoot, fFetcher, fCanvas, fGl, fBuffers, fGlVars, fWidth, fHeight ) {
 	var self = { };
 	self.addView = addView;
+	self.addData = addData;
 
+	var fNextSourceKey = 0;
 	var fSourceKeys    = [];
 	var fDataSources   = {};
 	var fSourceBuffers = {};
@@ -482,11 +484,7 @@ var Viz = new function ( ) {
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
-		var source    = sources[i];
-		var sourceKey = addData( source.sourceName, source.typeName, 
-					 source.indexStart, source.indexEnd,
-					 source.xRange, source.yRange,
-					 source.projection);
+		var sourceKey  = sources[i];
 
 		fViewsBySource[ sourceKey ].push( plot );
 	    }
@@ -507,24 +505,25 @@ var Viz = new function ( ) {
 	    schudleDraw();
 	}
 
-	function addData ( sourceName, typeName, start, end, xRange, yRange, projection ) {
 
-	    var sourceKey = makeSourceKey( sourceName, typeName );
+	function addData ( sourceName, typeName, start, end, projection, options ) {
+	    var xRange;
+	    var yRange;
+
+	    if ( options !== undefined ) {
+		xRange = options.xRange;
+		yRange = options.yRange;
+	    }
+
+
+	    var sourceKey = fNextSourceKey++;
 	    
-	    var source = fDataSources[ sourceKey ];
-
-	    if ( source === undefined ) {
-		source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection );
-		fDataSources[ sourceKey ] = source;
-		fSourceBuffers[ sourceKey ] = [];
-		fViewsBySource[ sourceKey ] = [];
-		fSourceKeys.push( sourceKey );
-		source.addListener( handleNewData, sourceKey );
-	    }
-
-	    else {
-		source.getRange( start, end );
-	    }
+	    source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection );
+	    fDataSources[ sourceKey ] = source;
+	    fSourceBuffers[ sourceKey ] = [];
+	    fViewsBySource[ sourceKey ] = [];
+	    fSourceKeys.push( sourceKey );
+	    source.addListener( handleNewData, sourceKey );
 
 	   return sourceKey;
 	}
@@ -591,10 +590,6 @@ var Viz = new function ( ) {
 	    }
 
 	}
-    }
-
-    function makeSourceKey ( sourceName, typeName ) {
-	return sourceName + "\0" + typeName;
     }
 
     function tileCmp ( a, b ) {

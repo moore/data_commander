@@ -39,32 +39,23 @@ function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
 
     var viz = Viz( root, fetcher );
 
+    var currentData = viz.addData( sourceName, typeName,
+				   startTime, endTime, 
+				   [0, 1],
+				   { } );
+    var voltageData = viz.addData( sourceName, "batt voltages set",
+				   startTime, endTime, 
+				   [0, 1],
+				   { } );
+
     var plot1Data = [
-	{
-	    sourceName : sourceName, 
-	    typeName   : typeName  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	    projection : [0, 1]    ,
-	},
-	{
-	    sourceName : sourceName, 
-	    typeName   : "batt voltages set"  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	    projection : [0, 1]    ,
-	}
+	currentData,
+	voltageData,
+
     ];
 
-
     var plot2Data = [
-	{
-	    sourceName : sourceName, 
-	    typeName   : "batt voltages set"  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	    projection : [0, 1]    ,
-	}
+	voltageData,
     ];
 
     viz.addView( ScatterPlot, "#plot1",
