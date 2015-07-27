@@ -109,6 +109,45 @@ extern "C" {
     return result;
   }
 
+  double readColumnMin( iterator_t *iterator, uint32_t index ) {
+    double result;
+
+    if ( index == 0 )
+      result = iterator->indexColumn.valueFactor 
+	* (double)Column_read_min( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = iterator->columns[ index - 1 ].valueFactor
+	        * (double)Column_read_min( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
+  }
+
+  double readColumnMax( iterator_t *iterator, uint32_t index ) {
+    double result;
+
+    if ( index == 0 )
+      result = iterator->indexColumn.valueFactor 
+	* (double)Column_read_max( iterator->indexColumn.column );
+
+    else if ( index <= iterator->columnCount )
+      result = iterator->columns[ index - 1 ].valueFactor
+	        * (double)Column_read_max( iterator->columns[ index - 1 ].column );
+
+    else
+      result = 0;
+
+    return result;
+  }
+
+  double readEntriesCount( iterator_t *iterator, uint32_t index ) {
+    return (double)iterator->count;
+  }
+
+
   uint32_t getColumCount ( iterator_t *iterator ) {
     return iterator->columnCount + 1;
   }

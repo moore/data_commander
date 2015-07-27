@@ -31,6 +31,9 @@ Polymer({
     },    
 });
 
+
+
+
 function loadMap ( root, sources, startDate, endDate ) {
 
     var typeName = "scene";
@@ -38,6 +41,7 @@ function loadMap ( root, sources, startDate, endDate ) {
 
     var startTime = startDate.getTime();
     var endTime   = endDate.getTime();
+
 
     var fetcher = new DataFetcher ( );
 

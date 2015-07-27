@@ -8,16 +8,19 @@ function loadBuffer ( arrayBuffer ) {
     return ptr;
 }
 
-var readIndexStart = Module.cwrap('readIndexStart' , 'number', ['number']);
-var initIterator   = Module.cwrap('initIterator'   , null    , ['number']);
-var nextValue      = Module.cwrap('nextValue'      , 'number', ['number', 'number']);
-var finishIterator = Module.cwrap('finishIterator' , null    , ['number']);
-var readValue      = Module.cwrap('readValue'      , 'number', ['number', 'number']);
-var _getName       = Module.cwrap('getName'        , 'number', ['number', 'number']);
-var _getNameLength = Module.cwrap('getNameLength'  , 'number', ['number', 'number']);
-var _getUnits       = Module.cwrap('getUnits'        , 'number', ['number', 'number']);
-var _getUnitsLength = Module.cwrap('getUnitsLength'  , 'number', ['number', 'number']);
-var getColumCount  = Module.cwrap('getColumCount'  , 'number', ['number']);
+var readIndexStart   = Module.cwrap('readIndexStart'  , 'number', ['number']);
+var initIterator     = Module.cwrap('initIterator'    , null    , ['number']);
+var nextValue        = Module.cwrap('nextValue'       , 'number', ['number', 'number']);
+var finishIterator   = Module.cwrap('finishIterator'  , null    , ['number']);
+var readValue        = Module.cwrap('readValue'       , 'number', ['number', 'number']);
+var _getName         = Module.cwrap('getName'         , 'number', ['number', 'number']);
+var _getNameLength   = Module.cwrap('getNameLength'   , 'number', ['number', 'number']);
+var _getUnits        = Module.cwrap('getUnits'        , 'number', ['number', 'number']);
+var _getUnitsLength  = Module.cwrap('getUnitsLength'  , 'number', ['number', 'number']);
+var getColumCount    = Module.cwrap('getColumCount'   , 'number', ['number']);
+var readColumnMin    = Module.cwrap('readColumnMin'   , 'number', ['number', 'number']);
+var readColumnMax    = Module.cwrap('readColumnMax'   , 'number', ['number', 'number']);
+var readEntriesCount = Module.cwrap('readEntriesCount', 'number', ['number', 'number']);
 
 function readName ( iterator, index ) {
     var ptr    = _readName( iterator, index );

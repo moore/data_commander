@@ -599,36 +599,17 @@ var Viz = new function ( ) {
 
     function loadGlBuffer ( gl, tilePointer, minTime, projection ) {
 
-	var pointsCount = 0 | 0;
+	var pointsCount = readEntriesCount( );
 	
-	var minIndex;
-	var maxIndex;
-	var minValue;
-	var maxValue;
-
 	var iterator = initIterator( tilePointer );
 
-	// BUG: this loop should be pulled out to tile creation.
-	while ( nextValue( tilePointer, iterator ) !== 0 ) {
-	    pointsCount++;
+	var pointsCount = readEntriesCount( iterator );
 
-	    var time = readValue( iterator, projection[0] );
-
-	    if ( minIndex === undefined || minIndex > time )
-		minIndex = time;
-
-	    if ( maxIndex === undefined || maxIndex < time )
-		maxIndex = time;
-
-	    var value = readValue( iterator, projection[1] );
-
-	    if ( minValue === undefined || minValue > value )
-		minValue = value;
-
-	    if ( maxValue === undefined || maxValue < value )
-		maxValue = value;
-
-	}
+	var minIndex = readColumnMin( iterator, projection[0] );
+	var maxIndex = readColumnMax( iterator, projection[0] );
+	var minValue = readColumnMin( iterator, projection[1] );
+	var maxValue = readColumnMax( iterator, projection[1] );
+	
 
 	finishIterator( iterator );
 	var glData = new Float32Array(pointsCount*2);
