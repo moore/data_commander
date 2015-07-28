@@ -610,11 +610,7 @@ var Viz = new function ( ) {
 	var minValue = readColumnMin( iterator, projection[1] );
 	var maxValue = readColumnMax( iterator, projection[1] );
 	
-
-	finishIterator( iterator );
 	var glData = new Float32Array(pointsCount*2);
-
-	var iterator = initIterator( tilePointer );
 
 	for ( var j = 0 ; nextValue( tilePointer, iterator ) !== 0; j += 2 ) {
 	    glData[j]   = readValue( iterator, projection[0] ) - minTime;
