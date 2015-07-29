@@ -81,6 +81,7 @@ extern "C" {
     
     if ( index >= iterator->count )
       return false;
+
     updateColumn( &iterator->indexColumn, index );
     
     column_t *columns = iterator->columns;
@@ -91,6 +92,11 @@ extern "C" {
 
     iterator->index++;
     return true;
+  }
+
+
+  bool hasMore ( iterator_t* iterator ) {    
+    return iterator->index < iterator->count;
   }
 
 

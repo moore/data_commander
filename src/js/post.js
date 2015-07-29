@@ -11,6 +11,7 @@ function loadBuffer ( arrayBuffer ) {
 var readIndexStart   = Module.cwrap('readIndexStart'  , 'number', ['number']);
 var initIterator     = Module.cwrap('initIterator'    , null    , ['number']);
 var nextValue        = Module.cwrap('nextValue'       , 'number', ['number', 'number']);
+var hasMore          = Module.cwrap('hasMore'         , 'number', ['number']);
 var finishIterator   = Module.cwrap('finishIterator'  , null    , ['number']);
 var readValue        = Module.cwrap('readValue'       , 'number', ['number', 'number']);
 var _getName         = Module.cwrap('getName'         , 'number', ['number', 'number']);

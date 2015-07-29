@@ -461,8 +461,16 @@ var Viz = new function ( ) {
 	var fViewsBySource = {};
 	var fDrawSchulded  = false;
 	var fViews         = [];
-	var fValueMin      = undefined;
-	var fValueMax      = undefined;
+	var fMinY          = undefined;
+	var fMaxY          = undefined;
+	var fBufferInfo    = { 
+	    offset    : 0, 
+	    data      : new Float32Array(1024 * 1024), 
+	    glPointer : fGl.createBuffer(),
+	};
+
+	fGl.bindBuffer(fGl.ARRAY_BUFFER, fBufferInfo.glPointer);
+
 
 	return self;
 
@@ -518,7 +526,8 @@ var Viz = new function ( ) {
 
 	    var sourceKey = fNextSourceKey++;
 	    
-	    source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection );
+	    var source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection );
+
 	    fDataSources[ sourceKey ] = source;
 	    fSourceBuffers[ sourceKey ] = [];
 	    fViewsBySource[ sourceKey ] = [];
@@ -537,16 +546,20 @@ var Viz = new function ( ) {
 		var tilePointer = loadBuffer( tileArray );
 		var start       = source.getStart();
 		var projection  = source.getProjection();
-		var results     = loadGlBuffer( fGl, tilePointer, start, projection );
+		var dataInfo    = initSorceData( start, projection );
+		
+		loadGlBuffer( tilePointer, dataInfo, fBufferInfo );
 
-		if ( fValueMin === undefined || fValueMin > results.minY )
-		    fValueMin = results.minY;
+		fSourceBuffers[ sourceKey ].push( dataInfo );
 
-		if ( fValueMax === undefined || fValueMax < results.maxY )
-		    fValueMax = results.maxY;
+		if ( fMinY === undefined || fMinY > dataInfo.minY )
+		    fMinY = dataInfo.minY;
 
-		fSourceBuffers[ sourceKey ].push( results );
+		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
+		    fMaxY = dataInfo.maxY;
 	    }
+
+	    fGl.bufferData(fGl.ARRAY_BUFFER, fBufferInfo.data, fGl.STATIC_DRAW);
 
 	    schudleDraw();
 	}
@@ -576,10 +589,10 @@ var Viz = new function ( ) {
 		var valueMax  = source.getMax();
 
 		if ( valueMin === undefined )
-		    valueMin = fValueMin;
+		    valueMin =  fMinY;
 
 		if ( valueMax === undefined )
-		    valueMax = fValueMax;
+		    valueMax =  fMaxY;
 
 		for ( var j = 0 ; j < views.length ; j++ ) {
 		    views[j].doDraw( fGl, fBuffers, fGlVars, 
@@ -597,7 +610,32 @@ var Viz = new function ( ) {
     }
 
 
-    function loadGlBuffer ( gl, tilePointer, minTime, projection ) {
+    function loadValues ( tilePointer, iterator, minIndex, projection, buffer, offset ) {
+	for ( var j = offset ; 
+	      buffer.length > (j + 1) 
+	      && nextValue( tilePointer, iterator ) !== 0 ; 
+	      j += 2 ) {
+	    buffer[j]   = readValue( iterator, projection[0] ) - minIndex;
+	    buffer[j+1] = readValue( iterator, projection[1] );
+	}
+
+	return j;
+    }
+
+    function initSorceData ( xEpoc, projection ) {
+	return {
+	    xEpoc         : xEpoc,
+	    projection    : projection,
+	    mixX          : undefined,
+	    maxX          : undefined,
+	    minY          : undefined,
+	    maxY          : undefined, 
+	    pointsCount   : 0, 
+	    dataOffset    : 0,
+	};
+    }
+
+    function loadGlBuffer ( tilePointer, sourceData, bufferInfo ) {
 
 	var pointsCount = readEntriesCount( );
 	
@@ -605,34 +643,39 @@ var Viz = new function ( ) {
 
 	var pointsCount = readEntriesCount( iterator );
 
+	var projection = sourceData.projection;
+	var minTime    = sourceData.xEpoc;
+
 	var minIndex = readColumnMin( iterator, projection[0] );
 	var maxIndex = readColumnMax( iterator, projection[0] );
 	var minValue = readColumnMin( iterator, projection[1] );
 	var maxValue = readColumnMax( iterator, projection[1] );
 	
-	var glData = new Float32Array(pointsCount*2);
+	var buffer = bufferInfo.data;
+	var offset = bufferInfo.offset;
 
-	for ( var j = 0 ; nextValue( tilePointer, iterator ) !== 0; j += 2 ) {
-	    glData[j]   = readValue( iterator, projection[0] ) - minTime;
-	    glData[j+1] = readValue( iterator, projection[1] );
+	sourceData.dataOffset = offset;
+
+	while ( hasMore( iterator ) ) {
+	    offset = loadValues( tilePointer, iterator, minTime, projection, buffer, offset);
+	    if ( hasMore( iterator ) ) {
+		var newBuffer = new Float32Array( buffer.length * 2 );
+		newBuffer.set( buffer );
+		buffer = newBuffer;
+	    }
 	}
 
 	finishIterator( iterator );
 
-	var bufferPointer = gl.createBuffer();
+	sourceData.minX = minIndex;
+	sourceData.maxX = maxIndex;
+	sourceData.minY = minValue;
+	sourceData.maxY = maxValue;
 
-	gl.bindBuffer(gl.ARRAY_BUFFER, bufferPointer);
-	gl.bufferData(gl.ARRAY_BUFFER, glData, gl.STATIC_DRAW);
+	sourceData.pointsCount = (offset - bufferInfo.offset)/projection.length;
 
-	return {
-	    mixX          : minIndex,
-	    maxX          : maxIndex,
-	    minY          : minValue, 
-	    maxY          : maxValue, 
-	    pointsCount   : pointsCount, 
-	    bufferPointer : bufferPointer,
-	    tilePointer   : tilePointer,
-	};
+	bufferInfo.offset = offset;
+	bufferInfo.data   = buffer;
     }
 
 
@@ -656,7 +699,7 @@ var Viz = new function ( ) {
 function doGlDraw ( gl, glBuffers, glVars,
 		    fTranslateX, fTranslateY, fScaleX, fScaleY,
 		    xMin, xMax, yMin, yMax,
-		    top, left, width, height, data ) {
+	    top, left, width, height, data ) {
 
     var glWidth  = gl.canvas.clientWidth;
     var glHeight = gl.canvas.clientHeight;
@@ -720,8 +763,8 @@ function doGlDraw ( gl, glBuffers, glVars,
 
     for ( var i = 0 ; i < data.length ; i++ ) {
 	var info = data[i];
-	gl.bindBuffer(gl.ARRAY_BUFFER, info.bufferPointer);
-	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
+
+	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, info.dataOffset * 4);
 
 	gl.drawArrays(gl.POINTS, 0, info.pointsCount);
     }
