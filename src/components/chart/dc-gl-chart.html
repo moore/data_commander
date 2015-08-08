@@ -12,6 +12,8 @@
     <script id="fragment-shader" type="x-shader/x-fragment">
       precision highp float;
       varying float ignorPoint;
+      uniform vec3 color;
+
 
       void main(void) {
         if ( ignorPoint > 0.5 )
@@ -26,7 +28,7 @@
         //if ( length( gl_PointCoord - vec2(0.5) ) > 0.5 )
         //   discard;
 
-        gl_FragColor = vec4( 0.0, 1.0, 0.0, 0.5);
+        gl_FragColor = vec4( color, 0.5);
       }
     </script>
     <script id="vertex-shader" type="x-shader/x-vertex">

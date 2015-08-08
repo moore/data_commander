@@ -24,8 +24,8 @@ var readColumnMax    = Module.cwrap('readColumnMax'   , 'number', ['number', 'nu
 var readEntriesCount = Module.cwrap('readEntriesCount', 'number', ['number', 'number']);
 
 function readName ( iterator, index ) {
-    var ptr    = _readName( iterator, index );
-    var strLen = _readNameLength( initIterator, index );
+    var ptr    = _getName( iterator, index );
+    var strLen = _getNameLength( iterator, index );
 
     return Module.Pointer_stringify( ptr, strLen );
 }

@@ -49,38 +49,101 @@ function loadMap ( root, sources, startDate, endDate ) {
 
 
     var plot1Data = [];
+    var plot2Data = [];
+    var colors    = [ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0] ];
 
     for ( var i = 0 ; i < sources.length ; i++ ) {
+
 	var sourceKey = viz.addData( sources[i],  typeName, 
 				     startTime, endTime, 
-				     [2, 1],
 				     {
 					 xRange : [-180, 180],
 					 yRange : [-90 , 90 ],
+					 color  : colors[ i % colors.length ],
 				     } );
-	plot1Data.push( sourceKey );
+	plot1Data.push( [sourceKey, [2, 1], {}] );
 
+	var sourceKey2 = viz.addData( sources[i],  typeName,
+				      startTime, endTime, 
+				      { 
+					  color : colors[ i % colors.length ],
+				      } );
+	
+	plot2Data.push( [sourceKey2, [0, 1], { loadFunction: histogramByDay } ]);
     }
 
 
-    var plot2Data = [
-	viz.addData( "0906:bus2", "batt voltages set",
-		     startTime, endTime, 
-		     [0, 1],
-		     { } ),
-		     
-    ];
 
     viz.addView( ScatterPlot, "#plot1",
 		 plot1Data,
-		 { lockZoomXY : true } );
+		 {
+		     lockZoomXY : true,
+		     group      : 1,
+		 } );
 
     viz.addView( ScatterPlot, "#plot2",  
 		 plot2Data,
-		 {  } );
+		 {
+		     group : 2,
+		 } );
 
     
     return viz;
+
+    function histogramByDay ( tilePointer, iterator, sourceData, buffer, offset ) {
+
+	var projection = sourceData.projection;
+	var minIndex   = sourceData.xStart;
+	var maxIndex   = sourceData.xEnd;
+
+	var DAY     = 24*60*60*1000;
+	var buckets = Math.ceil((maxIndex - minIndex)/DAY);
+	
+	// If there is not enought for all out the possible points
+	// return so we get a bigger buffer.
+	if ( 2*(buckets.length - offset) < buckets )
+	    return offset;
+
+	while ( nextValue( tilePointer, iterator ) !== 0 ) {
+	    var rawTime = readValue( iterator, projection[0] ) * 1000;
+	    
+	    if ( rawTime < minIndex || rawTime > maxIndex )
+		continue;
+
+	    var time   = rawTime - minIndex;
+	    var day    = Math.floor(time/DAY) * DAY;
+	    var bucket = offset + 2*day/DAY;
+
+	    buffer[bucket]   = day;
+	    buffer[bucket+1] += 1;
+
+	}
+
+
+	var yMin = buffer[ offset + 1 ];
+	var yMax = yMin;
+
+	for ( var i = 1 ; i < buckets ; i++ ) {
+	    var yVal = buffer[ offset + i*2 +1 ];
+	    if ( yVal < yMin )
+		yMin = yVal;
+
+	    if ( yVal > yMax )
+		yMax = yVal
+
+	}
+	
+	sourceData.dataOffset  = offset;
+	sourceData.pointsCount = buckets;
+
+	sourceData.minX = buffer[ offset ];
+	sourceData.maxX = buffer[ offset + 2*(buckets-1)];
+	sourceData.minY = yMax;
+	sourceData.maxY = yMin;
+
+
+	return offset + 2*buckets;
+    }
 
 
 /*

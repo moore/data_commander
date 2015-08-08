@@ -37,16 +37,20 @@ function loadGraph ( root, sourceName, typeName, startDate, endDate ) {
 
     var fetcher = new DataFetcher ( );
 
-    var viz = Viz( root, fetcher );
+    var viz    = Viz( root, fetcher );
 
     var currentData = viz.addData( sourceName, typeName,
 				   startTime, endTime, 
 				   [0, 1],
-				   { } );
+				   { 
+				       color : [0.0, 1.0, 0.0],
+				   } );
     var voltageData = viz.addData( sourceName, "batt voltages set",
 				   startTime, endTime, 
 				   [0, 1],
-				   { } );
+				   { 
+				       color : [0.0, 0.0, 1.0],
+				   } );
 
     var plot1Data = [
 	currentData,

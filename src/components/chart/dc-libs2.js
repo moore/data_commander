@@ -111,17 +111,16 @@ var DataFetcher = new function ( ) {
 
 var RemoteData = new function ( ) {
     var BUCKET_SIZE = 24 * 60 * 60 * 1000;
+    var sNextSourceId = 1;
     return factory;
 
-    function factory ( fFetcher, fSource, fType, fStart, fEnd, xRange, yRange, projection, fLoadFunction, color ) {
+    function factory ( fFetcher, fSource, fType, fStart, fEnd, xRange, yRange, color ) {
 
-
-	var fProjection = projection.slice(0);
 	var fColor      = new Float32Array( color );
 	var fRanges     = [];
 	var fSelectons  = [];
 
-	for ( var i = 0 ; i < fProjection.length ; i++ ) {
+	for ( var i = 0 ; i < 2 ; i++ ) {
 	    fRanges.push({min: undefined, max: undefined} );
 	    fSelectons.push({min: undefined, max: undefined} );
 	}
@@ -145,20 +144,20 @@ var RemoteData = new function ( ) {
 	}
 
 
+	var fSourceId = sNextSourceId++;
+
 	return init( fFetcher, 
-		     fSource, fType, 
+		     fSourceId, fSource, fType, 
 		     fStart, fEnd,
 		     fRanges, fSelectons, 
-		     fProjection, fLoadFunction, 
 		     fColor );
     }
 
     function init ( fFetcher, 
-		     fSource, fType, 
-		     fStart, fEnd,
-		     fRanges, fSelectons, 
-		     fProjection, fLoadFunction, 
-		     fColor ) {
+		    fSourceId, fSource, fType, 
+		    fStart, fEnd,
+		    fRanges, fSelectons, 
+		    fColor ) {
 	var fBatcher         = new BatchAction ( );
 	var self             = {};
 	var fRequestedTimes  = {};
@@ -167,8 +166,7 @@ var RemoteData = new function ( ) {
 	var fNewData         = [];
 	var fEventsTriggeres = [];
 
-	fProjection = fProjection.slice(0);
-
+	self.getId           = getId;
 	self.addListener     = addListener;
 	self.getTile         = getTile;
 	self.getRange        = getRange;
@@ -176,13 +174,15 @@ var RemoteData = new function ( ) {
 	self.getEnd          = getEnd;
 	self.getMin          = getMin;
 	self.getMax          = getMax;
-	self.getProjection   = getProjection;
-	self.getLoadFunction = getLoadFunction;
 	self.getColor        = getColor;
 
 	getData( fFetcher, fSource, fType, fStart, fEnd, gotData, noData );
 
 	return self;
+
+	function getId ( ) {
+	    return fSourceId;
+	}
 
 	function addListener ( callback, options ) {
 	    fListeners.push( [ callback, options ] );
@@ -193,7 +193,7 @@ var RemoteData = new function ( ) {
 	}
 
 	function getRange ( start, end ) {
-	    // BOOG something like this but we probbly should track the range.
+	    // BUG: something like this but we probbly should track the range.
 	    //getData( fFetcher, fSource, fType, start, end, gotData, noData );
 	}
 
@@ -212,15 +212,7 @@ var RemoteData = new function ( ) {
 	function getMax ( ) {
 	    return fSelectons[1].max;
 	}
-
-	function getProjection ( ) {
-	    return fProjection.slice(0);
-	}
 	
-	function getLoadFunction ( ) {
-	    return fLoadFunction;
-	}
-
 	function getColor ( ) {
 	    return fColor;
 	}
@@ -292,15 +284,79 @@ var RemoteData = new function ( ) {
 
 };
 
-var ScatterPlot = new function ( ) {
+
+function identityFunction ( tilePointer, iterator, sourceData, buffer, offset ) {
+
+    var projection = sourceData.projection;
+    var minIndex   = sourceData.xStart;
+
+    sourceData.dataOffset  = offset;
+    sourceData.pointsCount = readEntriesCount( iterator );
+
+    sourceData.minX = readColumnMin( iterator, projection[0] );
+    sourceData.maxX = readColumnMax( iterator, projection[0] );
+    sourceData.minY = readColumnMin( iterator, projection[1] );
+    sourceData.maxY = readColumnMax( iterator, projection[1] );
+
+
+    for ( var j = offset ; 
+	  buffer.length > (j + 1) 
+	  && nextValue( tilePointer, iterator ) !== 0 ; 
+	  j += 2 ) {
+	buffer[j]   = readValue( iterator, projection[0] ) - minIndex;
+	buffer[j+1] = readValue( iterator, projection[1] );
+    }
+
+
+    return j;
+}
+
+function initSorceData ( xStart, xEnd, projection ) {
+    return {
+	xStart        : xStart,
+	xEnd          : xEnd,
+	projection    : projection,
+	mixX          : undefined,
+	maxX          : undefined,
+	minY          : undefined,
+	maxY          : undefined, 
+	pointsCount   : 0, 
+	dataOffset    : 0,
+    };
+}
+
+function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
+    
+    var iterator = initIterator( tilePointer );
+
+    var buffer = bufferInfo.data;
+    var offset = bufferInfo.offset;
+
+
+    while ( hasMore( iterator ) ) {
+	offset = loadFunction( tilePointer, iterator, sourceData, buffer, offset);
+	if ( hasMore( iterator ) ) {
+	    var newBuffer = new Float32Array( buffer.length * 2 );
+	    newBuffer.set( buffer );
+	    buffer = newBuffer;
+	}
+    }
+
+    finishIterator( iterator );
+
+    bufferInfo.offset = offset;
+    bufferInfo.data   = buffer;
+}
+
+
+var BasePlot = new function ( ) {
     var sId   = 0;
     return factory;
 
-    function factory ( fRoot, data, options ) {
+    function factory ( fRoot, options ) {
 
 	var fLockZoom = false;
 	var fGroup    = 0;
-	var fData     = data.slice(0);
 
 	if ( options.lockZoomXY === true )
 	    fLockZoom = true;
@@ -311,7 +367,7 @@ var ScatterPlot = new function ( ) {
 	return init( fRoot, fLockZoom, fGroup );
     }
 
-    function init ( fRoot, fData, fLockZoom, fGroup ) {
+    function init ( fRoot, fLockZoom, fGroup ) {
 	var self = {};
 
 	var fDoZoomY     = false;
@@ -333,11 +389,14 @@ var ScatterPlot = new function ( ) {
 
 	self.id           = id;
 	self.getGroup     = getGroup;
-	self.doDraw       = doDraw;
+	self.doDraw       = undefined;
 	self.addListener  = addListener;
+	self.addData      = undefined;
 	self.updateView   = updateView;
 	self.getScale     = getScale;
 	self.getTranslate = getTranslate;
+
+	self._triggerEvents = triggerEvents;
 
 	return self;
 
@@ -352,7 +411,6 @@ var ScatterPlot = new function ( ) {
 	function addListener ( callback ) {
 	    fListeners.push( callback );
 	}
-
 
 	function updateView ( sourcePolt, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
 
@@ -386,12 +444,12 @@ var ScatterPlot = new function ( ) {
 
 
 	function getScale ( ) {
-	    return fZoom.scale();
+	    return [ fScaleX, fScaleY ];
 	}
 
 
 	function getTranslate ( ) {
-	    return fZoom.getTranslate();
+	    return [ fTranslateX, fTranslateY ];
 	}
 
 
@@ -455,26 +513,298 @@ var ScatterPlot = new function ( ) {
 	    triggerEvents( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
 	}
 
-	function doDraw ( gl, guffers, glVars, 
-			  indexMin, indexMax,
-			  valueMin, valueMax, 
-			  data, color ) {
+    }
+
+
+
+};
+
+var ScatterPlot = new function ( ) {
+    return factory;
+
+    function factory ( fRoot, fGl, options ) {
+
+	var self = BasePlot( fRoot, options );
+
+	return init( self, fRoot, fGl );
+    }
+
+    function init ( self, fRoot, fGl ) {
+
+	var fSources     = [];
+	var fSourceBuffers = [];
+	var fListeners   = [];
+	var fMinY        = undefined;
+	var fMaxY        = undefined;
+	var fMinX        = undefined;
+	var fMaxX        = undefined;
+
+	self.doDraw       = doDraw;
+	self.addData      = addData;
+
+	return self;
+
+
+	function addData ( sourceObject, projection, options ) {
+
+
+	    var bufferInfo  = { 
+		offset    : 0, 
+		data      : new Float32Array(1024 * 1024), 
+		glPointer : fGl.createBuffer(),
+	    };
+
+	    var sourceConfig = {};
+
+	    sourceConfig.bufferInfo   = bufferInfo;
+	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.sourceObject = sourceObject;
+	    sourceConfig.projection   = projection;
+	    sourceConfig.columnNames  = [undefined, undefined];
+
+	    fSources.push( sourceConfig );
+	    fSourceBuffers[ sourceObject.getId() ] = [];
+
+	    if ( options !== undefined ) {
+
+		if ( options.loadFunction != undefined ) {
+		    sourceConfig.loadFunction = options.loadFunction;
+		}
+	    }
+
+
+	    sourceObject.addListener( handleNewData, sourceConfig );
+	}
+
+
+
+
+
+	function doDraw ( glBuffers, glVars ) {
 	    var elementBox = fRoot.getBoundingClientRect();
 	    var top        = fRoot.offsetTop;
 	    var left       = fRoot.offsetLeft;
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
-	    doGlDraw( gl, guffers, glVars, 
-		      fTranslateX, fTranslateY, fScaleX, fScaleY,
-		      indexMin, indexMax, valueMin, valueMax, 
-		      top, left, width, height, data, color );
+	    
+	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+		var sourceConfig = fSources[i];
+		var bufferInfo   = sourceConfig.bufferInfo;
+		var source       = sourceConfig.sourceObject;
+		var indexMin     = source.getStart();
+		var indexMax     = source.getEnd();
+		var valueMin     = source.getMin();
+		var valueMax     = source.getMax();
+		var color        = source.getColor();
+		var sourceKey    = source.getId();
+		var data         = fSourceBuffers[ sourceKey ];
+
+		if ( valueMin === undefined )
+		    valueMin =  fMinY;
+
+		if ( valueMax === undefined )
+		    valueMax =  fMaxY;
+
+		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
+
+		var translate = self.getTranslate();
+		var scale     = self.getScale();
+
+		doGlDraw( fGl, glBuffers, glVars, 
+			  translate[0], translate[1], scale[0], scale[1],
+			  indexMin, indexMax, valueMin, valueMax, 
+			  top, left, width, height, data, color );
+	    }
 
 	}
 
 
+	function handleNewData ( source, tileArrays, sourceConfig ) {
+
+	    var projection   = sourceConfig.projection;
+	    var loadFunction = sourceConfig.loadFunction;
+	    var bufferInfo   = sourceConfig.bufferInfo;
+	    var source       = sourceConfig.sourceObject;
+	    var start        = source.getStart();
+	    var end          = source.getEnd();
+	    var sourceKey    = source.getId();
+
+	    var names = sourceConfig.columnNames;
+
+	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
+		var tileArray    = tileArrays[ i ];
+		var tilePointer  = loadBuffer( tileArray );
+		var dataInfo     = initSorceData( start, end, projection );
+
+		if ( names[0] === undefined ) {
+		    var iterator = initIterator( tilePointer );
+		    names[0] = readName( iterator, projection[0] );
+		    names[1] = readName( iterator, projection[1] );
+		    finishIterator( iterator );
+		}
+
+
+		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
+
+		fSourceBuffers[ sourceKey ].push( dataInfo );
+
+		if ( fMinY === undefined || fMinY > dataInfo.minY )
+		    fMinY = dataInfo.minY;
+
+		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
+		    fMaxY = dataInfo.maxY;
+	    }
+
+	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
+	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
+
+	    // BUG: we should probbly have a less hacky way of doing this
+	    self._triggerEvents( 1, 1, 0, 0 );
+	}
     }
 
+};
 
+
+var BarChart = new function ( ) {
+    return factory;
+
+    function factory ( fRoot, fGl, options ) {
+
+	var self = BasePlot( fRoot, options );
+
+	return init( self, fRoot, fGl );
+    }
+
+    function init ( self, fRoot, fGl ) {
+
+	var fSources     = [];
+	var fSourceBuffers = [];
+	var fListeners   = [];
+	var fMinY        = undefined;
+	var fMaxY        = undefined;
+	var fMinX        = undefined;
+	var fMaxX        = undefined;
+
+	self.doDraw       = doDraw;
+	self.addData      = addData;
+
+	return self;
+
+
+	function addData ( sourceObject, projection, options ) {
+
+
+	    var bufferInfo  = { 
+		offset    : 0, 
+		data      : new Float32Array(1024 * 1024), 
+		glPointer : fGl.createBuffer(),
+	    };
+
+	    var sourceConfig = {};
+
+	    sourceConfig.bufferInfo   = bufferInfo;
+	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.sourceObject = sourceObject;
+	    sourceConfig.projection   = projection;
+	    sourceConfig.columnNames  = [undefined, undefined];
+
+	    fSources.push( sourceConfig );
+	    fSourceBuffers[ sourceObject.getId() ] = [];
+
+	    if ( options !== undefined ) {
+
+		if ( options.loadFunction != undefined ) {
+		    sourceConfig.loadFunction = options.loadFunction;
+		}
+	    }
+
+
+	    sourceObject.addListener( handleNewData, sourceConfig );
+	}
+
+	function doDraw ( glBuffers, glVars ) {
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var top        = fRoot.offsetTop;
+	    var left       = fRoot.offsetLeft;
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+	    
+	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+		var sourceConfig = fSources[i];
+		var bufferInfo   = sourceConfig.bufferInfo;
+		var source       = sourceConfig.sourceObject;
+		var indexMin     = source.getStart();
+		var indexMax     = source.getEnd();
+		var valueMin     = source.getMin();
+		var valueMax     = source.getMax();
+		var color        = source.getColor();
+		var sourceKey    = source.getId();
+		var data         = fSourceBuffers[ sourceKey ];
+
+		if ( valueMin === undefined )
+		    valueMin =  fMinY;
+
+		if ( valueMax === undefined )
+		    valueMax =  fMaxY;
+
+		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
+
+		var translate = self.getTranslate();
+		var scale     = self.getScale();
+
+		doGlDraw( fGl, glBuffers, glVars, 
+			  translate[0], translate[1], scale[0], scale[1],
+			  indexMin, indexMax, valueMin, valueMax, 
+			  top, left, width, height, data, color );
+	    }
+
+	}
+
+
+	function handleNewData ( source, tileArrays, sourceConfig ) {
+
+	    var projection   = sourceConfig.projection;
+	    var loadFunction = sourceConfig.loadFunction;
+	    var bufferInfo   = sourceConfig.bufferInfo;
+	    var source       = sourceConfig.sourceObject;
+	    var start        = source.getStart();
+	    var end          = source.getEnd();
+	    var sourceKey    = source.getId();
+
+	    var names = sourceConfig.columnNames;
+
+	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
+		var tileArray    = tileArrays[ i ];
+		var tilePointer  = loadBuffer( tileArray );
+		var dataInfo     = initSorceData( start, end, projection );
+
+		if ( names[0] === undefined ) {
+		    var iterator = initIterator( tilePointer );
+		    names[0] = readName( iterator, projection[0] );
+		    names[1] = readName( iterator, projection[1] );
+		    finishIterator( iterator );
+		}
+
+
+		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
+
+		fSourceBuffers[ sourceKey ].push( dataInfo );
+
+		if ( fMinY === undefined || fMinY > dataInfo.minY )
+		    fMinY = dataInfo.minY;
+
+		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
+		    fMaxY = dataInfo.maxY;
+	    }
+
+	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
+	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
+
+	    // BUG: we should probbly have a less hacky way of doing this
+	    self._triggerEvents( 1, 1, 0, 0 );
+	}
+    }
 
 };
 
@@ -510,24 +840,11 @@ var Viz = new function ( ) {
 	self.addView = addView;
 	self.addData = addData;
 
-	var fNextSourceKey = 0;
 	var fSourceKeys    = [];
 	var fDataSources   = {};
-	var fSourceBuffers = {};
-	var fViewsBySource = {};
 	var fDrawSchulded  = false;
 	var fViews         = [];
-	var fMinY          = undefined;
-	var fMaxY          = undefined;
 	var fZoomGroups    = {};
-	var fBufferInfo    = { 
-	    offset    : 0, 
-	    data      : new Float32Array(1024 * 1024), 
-	    glPointer : fGl.createBuffer(),
-	};
-
-	fGl.bindBuffer(fGl.ARRAY_BUFFER, fBufferInfo.glPointer);
-
 
 	return self;
 
@@ -545,13 +862,17 @@ var Viz = new function ( ) {
 		return;
 	    }
 
-	    var plot = Type( plotRoot, sources, options );
+	    var plot = Type( plotRoot, fGl, options );
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
-		var sourceKey  = sources[i];
+		var sourceKey     = sources[i][0];
+		var projection    = sources[i][1];
+		var sourceOptions = sources[i][2];
 
-		fViewsBySource[ sourceKey ].push( plot );
+		var sourceObject = fDataSources[ sourceKey ];
+
+		plot.addData( sourceObject, projection, options );
 	    }
 
 	    plot.addListener( plotChange );
@@ -559,7 +880,6 @@ var Viz = new function ( ) {
 
 	function plotChange ( plot, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
 	    var changedId = plot.id();
-	    var group     = plot.getGroup();
 
 	    for ( var i = 0 ; i < fViews.length ; i++ ) {
 		var current = fViews[ i ];
@@ -574,67 +894,30 @@ var Viz = new function ( ) {
 	}
 
 
-	function addData ( sourceName, typeName, start, end, projection, options ) {
+	function addData ( sourceName, typeName, start, end, options ) {
 	    var xRange;
 	    var yRange;
-	    var loadFunction = identityFunction;
-	    var color        = [0.0, 1.0, 0.0];
+	    var color = [0.0, 1.0, 0.0];
 
 	    if ( options !== undefined ) {
 		xRange = options.xRange;
 		yRange = options.yRange;
 		
-		if ( options.loadFunction != undefined ) {
-		    loadFunction = options.loadFunction;
-		}
-
 		if ( options.color != undefined ) {
 		    color = options.color;
 		}
 	    }
 
-
-	    var sourceKey = fNextSourceKey++;
 	    
-	    var source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, projection, loadFunction, color );
+	    var source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, color );
 
+	    var sourceKey = source.getId();
 	    fDataSources[ sourceKey ] = source;
-	    fSourceBuffers[ sourceKey ] = [];
-	    fViewsBySource[ sourceKey ] = [];
 	    fSourceKeys.push( sourceKey );
-	    source.addListener( handleNewData, sourceKey );
 
 	   return sourceKey;
 	}
-	// BUG: we should handle the case where we want to map
-	//      over the same tile more then once, with and without
-	//      some kind of processing. Also we should handle the
-	//      case that we want to load more then just x, y.
-	function handleNewData ( source, tileArrays, sourceKey ) {
-	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
-		var tileArray    = tileArrays[ i ];
-		var tilePointer  = loadBuffer( tileArray );
-		var start        = source.getStart();
-		var end          = source.getEnd();
-		var projection   = source.getProjection();
-		var loadFunction = source.getLoadFunction();
-		var dataInfo     = initSorceData( start, end, projection );
-		
-		loadGlBuffer( loadFunction, tilePointer, dataInfo, fBufferInfo );
 
-		fSourceBuffers[ sourceKey ].push( dataInfo );
-
-		if ( fMinY === undefined || fMinY > dataInfo.minY )
-		    fMinY = dataInfo.minY;
-
-		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
-		    fMaxY = dataInfo.maxY;
-	    }
-
-	    fGl.bufferData(fGl.ARRAY_BUFFER, fBufferInfo.data, fGl.STATIC_DRAW);
-
-	    schudleDraw();
-	}
 
 	function schudleDraw ( ) {
 	    if ( fDrawSchulded === false ) {
@@ -650,102 +933,18 @@ var Viz = new function ( ) {
 
 	    fGl.clear(fGl.COLOR_BUFFER_BIT | fGl.DEPTH_BUFFER_BIT);
 
-	    for ( var i = 0 ; i < fSourceKeys.length ; i++ ) {
-		var sourceKey = fSourceKeys[i];
-		var data      = fSourceBuffers[sourceKey];
-		var views     = fViewsBySource[sourceKey];
-		var source    = fDataSources[sourceKey];
-		var indexMin  = source.getStart();
-		var indexMax  = source.getEnd();
-		var valueMin  = source.getMin();
-		var valueMax  = source.getMax();
-		var color     = source.getColor();
-
-		if ( valueMin === undefined )
-		    valueMin =  fMinY;
-
-		if ( valueMax === undefined )
-		    valueMax =  fMaxY;
-
-		for ( var j = 0 ; j < views.length ; j++ ) {
-		    views[j].doDraw( fGl, fBuffers, fGlVars, 
-				     indexMin, indexMax,
-				     valueMin, valueMax, 
-				     data, color);
-		}
+	    for ( var i = 0 ; i < fViews.length ; i++ ) {
+		// BUG: fBuffers and fGlVars should be owned by
+		//      a shader program object which is attrbute
+		//      of a view.
+		fViews[i].doDraw( fBuffers, fGlVars );
 	    }
-
 	}
     }
 
     function tileCmp ( a, b ) {
 	return readStartTime(a) - readStartTime(b);
     }
-
-
-    function identityFunction ( tilePointer, iterator, sourceData, buffer, offset ) {
-
-	var projection = sourceData.projection;
-	var minIndex   = sourceData.xStart;
-
-	sourceData.dataOffset  = offset;
-	sourceData.pointsCount = readEntriesCount( iterator );
-
-	sourceData.minX = readColumnMin( iterator, projection[0] );
-	sourceData.maxX = readColumnMax( iterator, projection[0] );
-	sourceData.minY = readColumnMin( iterator, projection[1] );
-	sourceData.maxY = readColumnMax( iterator, projection[1] );
-
-
-	for ( var j = offset ; 
-	      buffer.length > (j + 1) 
-	      && nextValue( tilePointer, iterator ) !== 0 ; 
-	      j += 2 ) {
-	    buffer[j]   = readValue( iterator, projection[0] ) - minIndex;
-	    buffer[j+1] = readValue( iterator, projection[1] );
-	}
-
-
-	return j;
-    }
-
-    function initSorceData ( xStart, xEnd, projection ) {
-	return {
-	    xStart        : xStart,
-	    xEnd          : xEnd,
-	    projection    : projection,
-	    mixX          : undefined,
-	    maxX          : undefined,
-	    minY          : undefined,
-	    maxY          : undefined, 
-	    pointsCount   : 0, 
-	    dataOffset    : 0,
-	};
-    }
-
-    function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
-	
-	var iterator = initIterator( tilePointer );
-
-	var buffer = bufferInfo.data;
-	var offset = bufferInfo.offset;
-
-
-	while ( hasMore( iterator ) ) {
-	    offset = loadFunction( tilePointer, iterator, sourceData, buffer, offset);
-	    if ( hasMore( iterator ) ) {
-		var newBuffer = new Float32Array( buffer.length * 2 );
-		newBuffer.set( buffer );
-		buffer = newBuffer;
-	    }
-	}
-
-	finishIterator( iterator );
-
-	bufferInfo.offset = offset;
-	bufferInfo.data   = buffer;
-    }
-
 
     function resize ( gl ) {
 	var width = gl.canvas.clientWidth;
