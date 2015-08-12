@@ -782,7 +782,6 @@ var BarChart = new function ( ) {
     function init ( self, fRoot, fGl, fSelectons ) {
 
 	var fSources     = [];
-	var fSourceBuffers = [];
 	var fListeners   = [];
 	var fD3Data      = {};
 	var fMinY        = undefined;
@@ -816,6 +815,9 @@ var BarChart = new function ( ) {
 			     fSelectons.getMin( key ),
 			     fSelectons.getMax( key ) );
 	    }
+
+	    for ( var i = 0 ; i < fSources.length ; i++ )
+		recomputeData( fSources[i] );
 	}
 	
 
@@ -917,7 +919,6 @@ var BarChart = new function ( ) {
 	    sourceConfig.name         = "bob";
 
 	    fSources.push( sourceConfig );
-	    fSourceBuffers[ sourceObject.getId() ] = [];
 
 	    if ( options !== undefined ) {
 
@@ -1023,6 +1024,68 @@ var BarChart = new function ( ) {
 	    ;
 	}
 
+	
+	function recomputeData ( sourceConfig ) {
+
+	    var projection   = sourceConfig.projection;
+	    var bufferInfo   = sourceConfig.bufferInfo;
+	    var source       = sourceConfig.sourceObject;
+	    //BUG: I I should not have to do unit conversion hear!
+	    var start        = source.getStart()/1000;
+	    var sourceKey    = source.getId();
+
+	    var data       = bufferInfo.data;
+	    var stop       = bufferInfo.offset/projection.length;
+	    var dataArray  = [];
+	    var dataIndex  = {};
+	    var DAY        = 24*60*60;
+	    
+	    var minLat = fSelectons.getMin( "lat" );
+	    var maxLat = fSelectons.getMax( "lat" );
+
+	    var minLon = fSelectons.getMin( "lon" );
+	    var maxLon = fSelectons.getMax( "lon" );
+
+	    for ( var i = 0 ; i < stop ; i++ ) {
+		var index = i*3;
+
+		var lat = data[index+1];
+		var lon = data[index+2];
+
+		if ( minLon > lon || maxLon < lon )
+		    continue;
+
+		if ( minLat > lat || maxLat < lat )
+		    continue;
+
+		var day = snapBound( data[index] + start, DAY ) * 1000;
+
+		var tupple = dataIndex[ day ];
+
+		if ( tupple === undefined ) {
+		    tupple = [ day, 0 ];
+		    dataArray.push( tupple );
+		    dataIndex[ day ] = tupple;
+		}
+		
+		tupple[1]++;
+	    }
+
+	    fMinY = undefined;
+	    fMaxY = undefined;
+
+	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
+		if ( fMinY === undefined || fMinY > dataArray[i][1] )
+		    fMinY = dataArray[i][1];
+
+		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
+		    fMaxY = dataArray[i][1];
+	    }
+
+	    fD3Data[sourceKey] = dataArray;
+
+	}
+
 
 	function handleNewData ( source, tileArrays, sourceConfig ) {
 
@@ -1052,42 +1115,9 @@ var BarChart = new function ( ) {
 
 
 		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
-
-		fSourceBuffers[ sourceKey ].push( dataInfo );
 	    }
 
-	    var data       = bufferInfo.data;
-	    var stop       = bufferInfo.offset/projection.length;
-	    var dataArray  = [];
-	    var dataIndex  = {};
-	    var DAY        = 24*60*60;
-	    var dataOffset = start; 
-
-	    for ( var i = 0 ; i < stop ; i++ ) {
-		var index = i*3;
-
-		var day = snapBound( data[index] + start, DAY ) * 1000;
-
-		var tupple = dataIndex[ day ];
-
-		if ( tupple === undefined ) {
-		    tupple = [ day, 0 ];
-		    dataArray.push( tupple );
-		    dataIndex[ day ] = tupple;
-		}
-		
-		tupple[1]++;
-	    }
-
-	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
-		if ( fMinY === undefined || fMinY > dataArray[i][1] )
-		    fMinY = dataArray[i][1];
-
-		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
-		    fMaxY = dataArray[i][1];
-	    }
-
-	    fD3Data[sourceKey] = dataArray;
+	    recomputeData( sourceConfig );
 
 	    // BUG: we should probbly have a less hacky way of doing this
 	    self._triggerEvents( 1, 1, 0, 0 );
