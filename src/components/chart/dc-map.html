@@ -33,8 +33,9 @@
     </script>
     <script id="vertex-shader" type="x-shader/x-vertex">
       precision highp float;
-      attribute vec2 aVertexPosition;
-    
+      attribute vec2 aVertexPositionX;
+      attribute vec2 aVertexPositionY;
+
       uniform mat4  uMVMatrix;
       uniform mat4  uPMatrix;
       uniform float xMax;
@@ -47,7 +48,8 @@
       
       void main(void) {
         gl_PointSize = 2.0;
-        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0, 1.0);
+        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPositionX.x, aVertexPositionY.x, 1.0, 1.0);
+      
 
         if (
               (gl_Position.y > yMax)
@@ -73,12 +75,12 @@
       </canvas>
       <div id="plot1">
 	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	<svg width="1000" height="750" class="sub-graph" id="plot-svg">
+	<svg width="1000" height="750" class="sub-graph" id="map-plot">
 	</svg>
       </div>
       <div id="plot2">
 	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	<svg width="1000" height="300" class="sub-graph" id="plot-svg">
+	<svg width="1000" height="300" class="sub-graph" id="bar-chart">
 	</svg>
       </div>
     </div>

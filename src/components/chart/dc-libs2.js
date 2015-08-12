@@ -271,10 +271,6 @@ var RemoteData = new function ( ) {
     }    
 
 
-    function snapBound ( time, bucketSize ) {
-	return Math.floor( time / bucketSize ) * bucketSize;
-    }
-
     function makePath ( dataSource, type, tileTime ) {
 	var result = '/data/' + dataSource + ':' + type + ':' + tileTime + '.tile';
 	return result;
@@ -284,6 +280,9 @@ var RemoteData = new function ( ) {
 
 };
 
+function snapBound ( time, bucketSize ) {
+    return Math.floor( time / bucketSize ) * bucketSize;
+}
 
 function identityFunction ( tilePointer, iterator, sourceData, buffer, offset ) {
 
@@ -298,13 +297,18 @@ function identityFunction ( tilePointer, iterator, sourceData, buffer, offset ) 
     sourceData.minY = readColumnMin( iterator, projection[1] );
     sourceData.maxY = readColumnMax( iterator, projection[1] );
 
+    var columns = projection.length;
 
     for ( var j = offset ; 
-	  buffer.length > (j + 1) 
+	  buffer.length > (j + columns - 1) 
 	  && nextValue( tilePointer, iterator ) !== 0 ; 
-	  j += 2 ) {
-	buffer[j]   = readValue( iterator, projection[0] ) - minIndex;
-	buffer[j+1] = readValue( iterator, projection[1] );
+	  j += columns ) {
+	for ( var i = 0 ; i < projection.length ; i++ ) {
+	    if ( i === 0 )
+		buffer[j] = readValue( iterator, projection[0] ) - minIndex;
+	    else
+		buffer[j+i] = readValue( iterator, projection[i] );
+	}
     }
 
 
@@ -316,7 +320,7 @@ function initSorceData ( xStart, xEnd, projection ) {
 	xStart        : xStart,
 	xEnd          : xEnd,
 	projection    : projection,
-	mixX          : undefined,
+	minX          : undefined,
 	maxX          : undefined,
 	minY          : undefined,
 	maxY          : undefined, 
@@ -378,10 +382,16 @@ var BasePlot = new function ( ) {
 	var fZoom        = d3.behavior.zoom();
 	var fListeners   = [];
 	var fId          = sId++;
+	var fX           = d3.scale.linear();
+	var fY           = d3.scale.linear();
+
+	initScales();
 
 	d3.select(fRoot).call(fZoom);
 
         fZoom
+	    .x(fX)
+	    .y(fY)
 	    .on("zoom", doZoom)
 	;
 	
@@ -395,10 +405,49 @@ var BasePlot = new function ( ) {
 	self.updateView   = updateView;
 	self.getScale     = getScale;
 	self.getTranslate = getTranslate;
+	self.domainZoomed = domainZoomed;
+	self.setXDomain   = setXDomain;
+	self.setYDomain   = setYDomain;
 
 	self._triggerEvents = triggerEvents;
+	self._getZoom       = getZoom;
 
 	return self;
+
+	function initScales ( ) {
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+
+	    fX.range( [0, width] );
+	    fY.range( [0, height] );
+	}
+
+
+	function domainZoomed ( ) {
+	    initScales();
+
+	    var xRange = fX.range();
+	    var xMin = fX.invert(xRange[0]);
+	    var xMax = fX.invert(xRange[1]);
+
+	    var yRange = fY.range();
+	    var yMin = fY.invert(yRange[0]);
+	    var yMax = fY.invert(yRange[1]);
+
+	    return { xMin : xMin, xMax : xMax, yMin : yMin, yMax : yMax };
+	}
+
+
+	function setXDomain ( minVal, maxVal ) {
+	    fX.domain([minVal, maxVal] );
+	    fZoom.x(fX);
+	}
+
+	function setYDomain ( minVal, maxVal ) {
+	    fY.domain([minVal, maxVal] );
+	    fZoom.y(fY);
+	}
 
 	function id ( ) {
 	    return fId;
@@ -408,6 +457,10 @@ var BasePlot = new function ( ) {
 	    return fGroup;
 	}
 
+	function getZoom ( ) {
+	    return fZoom;
+	}
+	
 	function addListener ( callback ) {
 	    fListeners.push( callback );
 	}
@@ -514,22 +567,20 @@ var BasePlot = new function ( ) {
 	}
 
     }
-
-
-
 };
+
 
 var ScatterPlot = new function ( ) {
     return factory;
 
-    function factory ( fRoot, fGl, options ) {
+    function factory ( fRoot, fGl, fSelectons, options ) {
 
 	var self = BasePlot( fRoot, options );
 
-	return init( self, fRoot, fGl );
+	return init( self, fRoot, fGl, fSelectons );
     }
 
-    function init ( self, fRoot, fGl ) {
+    function init ( self, fRoot, fGl, fSelectons ) {
 
 	var fSources     = [];
 	var fSourceBuffers = [];
@@ -541,12 +592,63 @@ var ScatterPlot = new function ( ) {
 
 	self.doDraw       = doDraw;
 	self.addData      = addData;
+	
+	self.addListener( updateSelections );
 
 	return self;
 
+	function updateKey ( key, results, minVal, maxVal ) {
+
+	    var range = results[ key ];
+	    
+	    if ( range === undefined ) {
+		range = { min : undefined, max : undefined };
+		results[ key ] = range;
+	    }
+	    
+	    if ( minVal !== undefined && 
+		 (range.min === undefined || range.min > minVal ) )
+		range.min = minVal;
+
+	    if ( maxVal !== undefined && 
+		 (range.max === undefined || range.max > maxVal ) )
+		range.max = maxVal;
+	}
+
+
+	// BUG: Should this check which axies we are changing?
+	function updateSelections ( ) {
+	    var results = {};
+
+	    var scale     = self.getScale();
+	    var translate = self.getTranslate();
+
+	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+		var sourceConfig = fSources[i];
+
+		var names = sourceConfig.columnNames;
+
+		if ( names[0] === undefined )
+		    continue;
+
+		var zoomedDomain = self.domainZoomed();
+
+		updateKey( names[0], results, zoomedDomain.xMin, zoomedDomain.xMax );
+		updateKey( names[1], results, zoomedDomain.yMin, zoomedDomain.yMax );
+	    }
+
+	    var keys = Object.keys( results );
+
+	    for ( var i = 0 ; i < keys.length ; i++ ) {
+		var key   = keys[i];
+		var range = results[key];
+
+		fSelectons.setSelection( key, range.min, range.max );
+	    }
+
+	}
 
 	function addData ( sourceObject, projection, options ) {
-
 
 	    var bufferInfo  = { 
 		offset    : 0, 
@@ -577,10 +679,7 @@ var ScatterPlot = new function ( ) {
 	}
 
 
-
-
-
-	function doDraw ( glBuffers, glVars ) {
+	function doDraw ( glVars ) {
 	    var elementBox = fRoot.getBoundingClientRect();
 	    var top        = fRoot.offsetTop;
 	    var left       = fRoot.offsetLeft;
@@ -610,7 +709,7 @@ var ScatterPlot = new function ( ) {
 		var translate = self.getTranslate();
 		var scale     = self.getScale();
 
-		doGlDraw( fGl, glBuffers, glVars, 
+		doGlDraw( fGl, glVars, 
 			  translate[0], translate[1], scale[0], scale[1],
 			  indexMin, indexMax, valueMin, valueMax, 
 			  top, left, width, height, data, color );
@@ -654,6 +753,10 @@ var ScatterPlot = new function ( ) {
 		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
 		    fMaxY = dataInfo.maxY;
 	    }
+
+	    
+	    self.setXDomain( source.getStart(), source.getEnd() );
+	    self.setYDomain( source.getMin(), source.getMax() );
 
 	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
@@ -669,31 +772,134 @@ var ScatterPlot = new function ( ) {
 var BarChart = new function ( ) {
     return factory;
 
-    function factory ( fRoot, fGl, options ) {
+    function factory ( fRoot, fGl, fSelectons, options ) {
 
 	var self = BasePlot( fRoot, options );
 
-	return init( self, fRoot, fGl );
+	return init( self, fRoot, fGl, fSelectons );
     }
 
-    function init ( self, fRoot, fGl ) {
+    function init ( self, fRoot, fGl, fSelectons ) {
 
 	var fSources     = [];
 	var fSourceBuffers = [];
 	var fListeners   = [];
+	var fD3Data      = {};
 	var fMinY        = undefined;
 	var fMaxY        = undefined;
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
+
+	var fZoom        = self._getZoom();
+	var fChart       = undefined;
+	var fX           = undefined;
+	var fY           = undefined;
+	var fXAxis       = undefined;
+	var fYAxis       = undefined;
+
+	var fMargin = {top: 30, right: 60, bottom: 30, left: 60};
+
+	initChart( );
+
+	fSelectons.addListener( selectionChanged );
 
 	self.doDraw       = doDraw;
 	self.addData      = addData;
 
 	return self;
 
+	function selectionChanged ( keys ) {
+
+	    for ( var i = 0 ; i < keys.length ; i++ ) {
+		var key = keys[i];
+		console.log( "changed %s: %s..%s", key, 
+			     fSelectons.getMin( key ),
+			     fSelectons.getMax( key ) );
+	    }
+	}
+	
+
+	function resize ( ) {
+
+	    var elementBox = fRoot.getBoundingClientRect();
+
+
+	    width  = elementBox.width - fMargin.left - fMargin.right;
+	    height = elementBox.height - fMargin.top - fMargin.bottom;
+
+	    fX.range([0, width]);
+	    fY.range([height, 0]);
+
+	    fChart.select(".content")
+	    	.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")")
+	    ;
+
+
+	    fChart.select(".x-axis")
+		.attr("transform", "translate(0," + height + ")")
+		.call(fXAxis)
+	    ;
+
+	    fChart.select(".y-axis")
+		.call(fYAxis)
+	    ;
+	}
+
+	function initChart ( ) {
+	    
+	    var elementBox = fRoot.getBoundingClientRect();
+
+	    width  = elementBox.width - fMargin.left - fMargin.right;
+	    height = elementBox.height - fMargin.top - fMargin.bottom;
+
+	    fX = d3.time.scale.utc();
+	    
+	    fY = d3.scale.linear()
+		.range([0, height]);
+
+	    fXAxis = d3.svg.axis()
+		.scale(fX)
+		.orient("bottom");
+
+	    fYAxis = d3.svg.axis()
+		.scale(fY)
+		.orient("left")
+		.tickFormat(d3.format(".2s"));
+
+
+	    fChart = d3.select(fRoot).select("#bar-chart")
+		.append("g")
+		.classed("content", true)
+		.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")");
+
+	    //BOOG
+	    //fZoom.on("zoom", doZoom);
+	    //fZoom.x( fX );
+
+	    fChart.append("g")
+		.attr("class", "x-axis")
+		.attr("transform", "translate(0," + height + ")")
+		.call(fXAxis);
+
+	    fChart.append("g")
+		.attr("class", "y-axis")
+		.call(fYAxis)
+		.append("text")
+		.attr("transform", "rotate(-90)")
+		.attr("y", 6)
+		.attr("dy", ".71em")
+		.style("text-anchor", "end")
+		.text("Count Per-day");
+
+	    
+	}
+
+
+	function doZoom ( ) {
+	    doDraw();
+	}
 
 	function addData ( sourceObject, projection, options ) {
-
 
 	    var bufferInfo  = { 
 		offset    : 0, 
@@ -708,6 +914,7 @@ var BarChart = new function ( ) {
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = projection;
 	    sourceConfig.columnNames  = [undefined, undefined];
+	    sourceConfig.name         = "bob";
 
 	    fSources.push( sourceConfig );
 	    fSourceBuffers[ sourceObject.getId() ] = [];
@@ -719,46 +926,101 @@ var BarChart = new function ( ) {
 		}
 	    }
 
+	    var start = sourceObject.getStart();
+	    var end   = sourceObject.getEnd();
+	    
+	    if ( fMinX === undefined || fMinX > start )
+		fMinX = start;
+
+	    if ( fMaxX === undefined || fMaxX < end )
+		fMaxX = end;
+
+	    fX.domain( [ fMinX, fMaxX ] );
 
 	    sourceObject.addListener( handleNewData, sourceConfig );
 	}
 
-	function doDraw ( glBuffers, glVars ) {
-	    var elementBox = fRoot.getBoundingClientRect();
-	    var top        = fRoot.offsetTop;
-	    var left       = fRoot.offsetLeft;
-	    var width      = elementBox.width;
-	    var height     = elementBox.height;
-	    
+	function formatColor ( parts ) {
+	    return "rgb(" 
+		+ (parts[0] * 255) +","
+		+ (parts[1] * 255) +","
+		+ (parts[2] * 255) +")";
+	}
+
+	function doDraw ( glVars ) {
+	    resize( );
+
+	    var sourceData = [];
+
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
-		var sourceConfig = fSources[i];
-		var bufferInfo   = sourceConfig.bufferInfo;
-		var source       = sourceConfig.sourceObject;
-		var indexMin     = source.getStart();
-		var indexMax     = source.getEnd();
-		var valueMin     = source.getMin();
-		var valueMax     = source.getMax();
+		var source       = fSources[i].sourceObject;
 		var color        = source.getColor();
 		var sourceKey    = source.getId();
-		var data         = fSourceBuffers[ sourceKey ];
-
-		if ( valueMin === undefined )
-		    valueMin =  fMinY;
-
-		if ( valueMax === undefined )
-		    valueMax =  fMaxY;
-
-		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
-
-		var translate = self.getTranslate();
-		var scale     = self.getScale();
-
-		doGlDraw( fGl, glBuffers, glVars, 
-			  translate[0], translate[1], scale[0], scale[1],
-			  indexMin, indexMax, valueMin, valueMax, 
-			  top, left, width, height, data, color );
+		var plotData     = fD3Data[ sourceKey ];
+		if ( plotData !== undefined ) {
+		    sourceData.push( [ i, fSources[i].name, plotData, color ] );
+		}
 	    }
 
+	    fY.domain([0, fMaxY]);
+	    fX.ticks( d3.time.day );
+
+
+	    fChart.select(".x-axis")
+		.call(fXAxis)
+	    ;
+
+	    fChart.select(".y-axis")
+		.call(fYAxis)
+	    ;
+
+	    var sources = fChart.selectAll( ".bar-chart-data" )
+		.data( sourceData, function ( d ) { return d[0] } )
+	    ;
+
+	    sources.enter()
+		.append( 'g' )
+	        .classed( 'bar-chart-data', true )
+		.attr( 'transform', function (d, i) {
+		    return "translate( " + ( 10 * i - (10 *sourceData.length)/2 ) + ", 0)";
+		})
+	    	.style("fill", function(d) { return formatColor(d[3]); })
+
+	    ;
+
+	    sources
+		.attr( 'transform', function (d, i) {
+		    return "translate( " + ( 10 * i - (10 *sourceData.length)/2 ) + ", 0)";
+		})
+	    	.style("fill", function(d) { return formatColor(d[3]); })
+	    ;
+
+	    sources.exit()
+		.remove()
+	    ;
+
+	    var bars = sources.selectAll( 'rect' )
+		.data( function ( d ) { return d[2]; } )
+	    ;
+	    
+	    bars.enter()
+		.append( 'rect' )
+		.attr( 'x', function (d) { return fX( d[0] ) } )
+		.attr( 'y', function (d) { return fY( d[1] ) } )
+	    	.attr( 'width', 10 )
+		.attr( 'height', function (d) { return height - fY( d[1] ) } )
+	    ;
+
+	    bars
+		.attr( 'x', function (d) { return fX( d[0] ) } )
+		.attr( 'y', function (d) { return fY( d[1] ) } )
+		.attr( 'height', function (d) {  return height - fY( d[1] ) } )
+
+	    ;
+
+	    bars.exit()
+		.remove()
+	    ;
 	}
 
 
@@ -768,14 +1030,16 @@ var BarChart = new function ( ) {
 	    var loadFunction = sourceConfig.loadFunction;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
-	    var start        = source.getStart();
-	    var end          = source.getEnd();
+	    //BUG: I I should not have to do unit conversion hear!
+	    var start        = source.getStart()/1000;
+	    var end          = source.getEnd()/1000;
 	    var sourceKey    = source.getId();
 
 	    var names = sourceConfig.columnNames;
 
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
+		// BUG: I don't think I free this.
 		var tilePointer  = loadBuffer( tileArray );
 		var dataInfo     = initSorceData( start, end, projection );
 
@@ -790,16 +1054,40 @@ var BarChart = new function ( ) {
 		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
 
 		fSourceBuffers[ sourceKey ].push( dataInfo );
-
-		if ( fMinY === undefined || fMinY > dataInfo.minY )
-		    fMinY = dataInfo.minY;
-
-		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
-		    fMaxY = dataInfo.maxY;
 	    }
 
-	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
-	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
+	    var data       = bufferInfo.data;
+	    var stop       = bufferInfo.offset/projection.length;
+	    var dataArray  = [];
+	    var dataIndex  = {};
+	    var DAY        = 24*60*60;
+	    var dataOffset = start; 
+
+	    for ( var i = 0 ; i < stop ; i++ ) {
+		var index = i*3;
+
+		var day = snapBound( data[index] + start, DAY ) * 1000;
+
+		var tupple = dataIndex[ day ];
+
+		if ( tupple === undefined ) {
+		    tupple = [ day, 0 ];
+		    dataArray.push( tupple );
+		    dataIndex[ day ] = tupple;
+		}
+		
+		tupple[1]++;
+	    }
+
+	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
+		if ( fMinY === undefined || fMinY > dataArray[i][1] )
+		    fMinY = dataArray[i][1];
+
+		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
+		    fMaxY = dataArray[i][1];
+	    }
+
+	    fD3Data[sourceKey] = dataArray;
 
 	    // BUG: we should probbly have a less hacky way of doing this
 	    self._triggerEvents( 1, 1, 0, 0 );
@@ -807,6 +1095,56 @@ var BarChart = new function ( ) {
     }
 
 };
+
+
+var Selections = new function ( ) {
+    return constructor;
+
+    function constructor ( ) {
+	var self = {};
+	
+	var fBatcher     = new BatchAction ( );
+	var fListeners   = [];
+	var fSelections  = {};
+	var fChangedKeys = [];
+
+	self.addListener  = addListener;
+	self.setSelection = setSelection;
+	self.getMin       = getMin;
+	self.getMax       = getMax;
+
+	return self;
+
+	function addListener ( callback, callbackArgs ) {
+	    fListeners.push( [callback, callbackArgs]);
+	}
+
+	function setSelection ( key, minVal, maxVal ) {
+	    fSelections[ key ] = [ minVal, maxVal ];
+	    fChangedKeys[ key ] = true;
+	    fBatcher.batch( notifyChanges );
+	}
+
+	function getMin ( key ) {
+	    return fSelections[ key ][0];
+	}
+
+	function getMax ( key ) {
+	    return fSelections[ key ][1];
+	}
+
+	function notifyChanges ( ) {
+	    var keys = Object.keys( fChangedKeys );
+	    fChangedKeys = {};
+
+	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
+		var callbackInfo = fListeners[i];
+		callbackInfo[0]( keys.slice(0), callbackInfo[1] );
+	    }
+	}
+    }
+};
+
 
 var Viz = new function ( ) {
     return constructor;
@@ -819,7 +1157,6 @@ var Viz = new function ( ) {
 	var height = canvas.clientHeight;
 
 	var glVars  = initShaders( root, gl );
-	var buffers = initBuffers( gl, glVars );
 
 	gl.clearColor(0.0, 0.0, 0.0, 0.0);  // Clear to black, fully opaque
         gl.clearDepth(1.0);                 // Clear everything
@@ -830,12 +1167,12 @@ var Viz = new function ( ) {
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-	var self = init( root, fetcher, canvas, gl, buffers, glVars, width, height );
+	var self = init( root, fetcher, canvas, gl, glVars, width, height );
 
 	return self;
     }
 
-    function init ( fRoot, fFetcher, fCanvas, fGl, fBuffers, fGlVars, fWidth, fHeight ) {
+    function init ( fRoot, fFetcher, fCanvas, fGl,  fGlVars, fWidth, fHeight ) {
 	var self = { };
 	self.addView = addView;
 	self.addData = addData;
@@ -845,6 +1182,7 @@ var Viz = new function ( ) {
 	var fDrawSchulded  = false;
 	var fViews         = [];
 	var fZoomGroups    = {};
+	var fSelections    = new Selections ();
 
 	return self;
 
@@ -862,7 +1200,7 @@ var Viz = new function ( ) {
 		return;
 	    }
 
-	    var plot = Type( plotRoot, fGl, options );
+	    var plot = Type( plotRoot, fGl, fSelections, options );
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
@@ -872,7 +1210,7 @@ var Viz = new function ( ) {
 
 		var sourceObject = fDataSources[ sourceKey ];
 
-		plot.addData( sourceObject, projection, options );
+		plot.addData( sourceObject, projection, sourceOptions );
 	    }
 
 	    plot.addListener( plotChange );
@@ -937,7 +1275,7 @@ var Viz = new function ( ) {
 		// BUG: fBuffers and fGlVars should be owned by
 		//      a shader program object which is attrbute
 		//      of a view.
-		fViews[i].doDraw( fBuffers, fGlVars );
+		fViews[i].doDraw( fGlVars );
 	    }
 	}
     }
@@ -963,7 +1301,7 @@ var Viz = new function ( ) {
 
 
 
-function doGlDraw ( gl, glBuffers, glVars,
+function doGlDraw ( gl, glVars,
 		    fTranslateX, fTranslateY, fScaleX, fScaleY,
 		    xMin, xMax, yMin, yMax,
 	    top, left, width, height, data, color ) {
@@ -1034,7 +1372,9 @@ function doGlDraw ( gl, glBuffers, glVars,
     for ( var i = 0 ; i < data.length ; i++ ) {
 	var info = data[i];
 
-	gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 0, info.dataOffset * 4);
+	// BUG: even thou we will not use .y it could walk of the end of the buffer :(
+	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 0, 4 + info.dataOffset * 4);
 
 	gl.drawArrays(gl.POINTS, 0, info.pointsCount);
     }
@@ -1064,50 +1404,17 @@ function initShaders( root, gl ) {
     
     gl.useProgram(shaderProgram);
     
-    var vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
-    gl.enableVertexAttribArray(vertexPositionAttribute);
+    var vertexPositionAttributeX = gl.getAttribLocation(shaderProgram, "aVertexPositionX");
+    gl.enableVertexAttribArray(vertexPositionAttributeX);
+
+    var vertexPositionAttributeY = gl.getAttribLocation(shaderProgram, "aVertexPositionY");
+    gl.enableVertexAttribArray(vertexPositionAttributeY);
     
-    return { points : vertexPositionAttribute, shader : shaderProgram }
+    return { pointsX : vertexPositionAttributeX, 
+	     pointsY : vertexPositionAttributeY, 
+	     shader  : shaderProgram }
 
 }
-
-function initBuffers( gl, glVars ) {
-    
-    // Create a buffer for the square's vertices.
-    
-    var squareVerticesBuffer = gl.createBuffer();
-    
-    // Select the squareVerticesBuffer as the one to apply vertex
-    // operations to from here out.
-    
-    gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
-    
-    // Now create an array of vertices for the square. Note that the Z
-    // coordinate is always 0 here.
-    
-    var vertices = [
-        1.0,  1.0,
-	    -1.0,  1.0,
-        1.0, -1.0,
-	    -1.0, -1.0
-    ];
-    
-    // Now pass the list of vertices into WebGL to build the shape. We
-    // do this by creating a Float32Array from the JavaScript array,
-    // then use it to fill the current vertex buffer.
-    
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
-    
-    // Draw the square by binding the array buffer to the square's vertices
-    // array, setting attributes, and pushing it to GL.
-    
-    gl.bindBuffer(gl.ARRAY_BUFFER, squareVerticesBuffer);
-    gl.vertexAttribPointer(glVars.points, 2, gl.FLOAT, false, 0, 0);
-    
-
-    return { points : squareVerticesBuffer };
-}
-
 
 
 function getShader(root, gl, id) {

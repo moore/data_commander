@@ -25,6 +25,11 @@ body {
     color     : white;
 }
 
+#plot2 {
+    stroke : white;
+    fill   : white;
+}
+
 .sub-graph {
     transform : translateZ(0);
     display   : block;

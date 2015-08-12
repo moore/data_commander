@@ -69,7 +69,8 @@ function loadMap ( root, sources, startDate, endDate ) {
 					  color : colors[ i % colors.length ],
 				      } );
 	
-	plot2Data.push( [sourceKey2, [0, 1], { loadFunction: histogramByDay } ]);
+	//plot2Data.push( [sourceKey2, [0, 1], { loadFunction: histogramByDay } ]);
+	plot2Data.push( [sourceKey2, [0, 1, 2], { } ]);
     }
 
 
@@ -81,7 +82,7 @@ function loadMap ( root, sources, startDate, endDate ) {
 		     group      : 1,
 		 } );
 
-    viz.addView( ScatterPlot, "#plot2",  
+    viz.addView( BarChart, "#plot2",  
 		 plot2Data,
 		 {
 		     group : 2,
@@ -106,41 +107,51 @@ function loadMap ( root, sources, startDate, endDate ) {
 
 	while ( nextValue( tilePointer, iterator ) !== 0 ) {
 	    var rawTime = readValue( iterator, projection[0] ) * 1000;
+	    var day     =  Math.floor(rawTime/DAY) * DAY;;
 	    
-	    if ( rawTime < minIndex || rawTime > maxIndex )
+	    if ( day < minIndex || day > maxIndex )
 		continue;
 
 	    var time   = rawTime - minIndex;
 	    var day    = Math.floor(time/DAY) * DAY;
 	    var bucket = offset + 2*day/DAY;
-
-	    buffer[bucket]   = day;
+	    
+	    buffer[bucket]   = Math.floor(rawTime/DAY) * DAY;
 	    buffer[bucket+1] += 1;
-
 	}
 
 
-	var yMin = buffer[ offset + 1 ];
-	var yMax = yMin;
+	var xMin = undefined;
+	var xMax = undefined;
+	var yMin = undefined;
+	var yMax = undefined;
 
 	for ( var i = 1 ; i < buckets ; i++ ) {
+
+	    var xVal = buffer[ offset + i*2    ];
 	    var yVal = buffer[ offset + i*2 +1 ];
-	    if ( yVal < yMin )
+
+	    if ( xMin === undefined || xVal < xMin )
+		xMin = xVal;
+
+	    if ( xMax === undefined || xVal > xMax )
+		xMax = xVal
+
+
+	    if ( yMin === undefined || yVal < yMin )
 		yMin = yVal;
 
-	    if ( yVal > yMax )
+	    if ( yMax === undefined || yVal > yMax )
 		yMax = yVal
-
 	}
 	
 	sourceData.dataOffset  = offset;
 	sourceData.pointsCount = buckets;
 
-	sourceData.minX = buffer[ offset ];
-	sourceData.maxX = buffer[ offset + 2*(buckets-1)];
-	sourceData.minY = yMax;
-	sourceData.maxY = yMin;
-
+	sourceData.minX = xMin;
+	sourceData.maxX = xMax;
+	sourceData.minY = yMin;
+	sourceData.maxY = yMax;
 
 	return offset + 2*buckets;
     }
