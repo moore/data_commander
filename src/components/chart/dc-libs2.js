@@ -589,6 +589,8 @@ var ScatterPlot = new function ( ) {
 	var fMaxY        = undefined;
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
+	var fGlVars      = initShaders( fRoot, fGl );
+
 
 	self.doDraw       = doDraw;
 	self.addData      = addData;
@@ -679,7 +681,7 @@ var ScatterPlot = new function ( ) {
 	}
 
 
-	function doDraw ( glVars ) {
+	function doDraw ( ) {
 	    var elementBox = fRoot.getBoundingClientRect();
 	    var top        = fRoot.offsetTop;
 	    var left       = fRoot.offsetLeft;
@@ -709,7 +711,7 @@ var ScatterPlot = new function ( ) {
 		var translate = self.getTranslate();
 		var scale     = self.getScale();
 
-		doGlDraw( fGl, glVars, 
+		doGlDraw( fGl, fGlVars, 
 			  translate[0], translate[1], scale[0], scale[1],
 			  indexMin, indexMax, valueMin, valueMax, 
 			  top, left, width, height, data, color );
@@ -936,7 +938,7 @@ var BarChart = new function ( ) {
 		+ (parts[2] * 255) +")";
 	}
 
-	function doDraw ( glVars ) {
+	function doDraw ( ) {
 	    resize( );
 
 	    var sourceData = [];
@@ -1248,8 +1250,6 @@ var Viz = new function ( ) {
 	var width  = canvas.clientWidth;
 	var height = canvas.clientHeight;
 
-	var glVars  = initShaders( root, gl );
-
 	gl.clearColor(0.0, 0.0, 0.0, 0.0);  // Clear to black, fully opaque
         gl.clearDepth(1.0);                 // Clear everything
         gl.enable(gl.DEPTH_TEST);           // Enable depth testing
@@ -1259,12 +1259,12 @@ var Viz = new function ( ) {
 	gl.enable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
 
-	var self = init( root, fetcher, canvas, gl, glVars, width, height );
+	var self = init( root, fetcher, canvas, gl, width, height );
 
 	return self;
     }
 
-    function init ( fRoot, fFetcher, fCanvas, fGl,  fGlVars, fWidth, fHeight ) {
+    function init ( fRoot, fFetcher, fCanvas, fGl, fWidth, fHeight ) {
 	var self = { };
 	self.addView = addView;
 	self.addData = addData;
@@ -1359,10 +1359,7 @@ var Viz = new function ( ) {
 	    fGl.clear(fGl.COLOR_BUFFER_BIT | fGl.DEPTH_BUFFER_BIT);
 
 	    for ( var i = 0 ; i < fViews.length ; i++ ) {
-		// BUG: fBuffers and fGlVars should be owned by
-		//      a shader program object which is attrbute
-		//      of a view.
-		fViews[i].doDraw( fGlVars );
+		fViews[i].doDraw( );
 	    }
 	}
     }
@@ -1508,6 +1505,7 @@ function getShader(root, gl, id) {
     var shaderScript = root.querySelector( "#" + id );
     
     if (!shaderScript) {
+	console.log( "could not find %s", id, root, document); //BOOG
         return null;
     }
     

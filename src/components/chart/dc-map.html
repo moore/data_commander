@@ -10,6 +10,15 @@
 <dom-module id="dc-map">
   <template>
     <link rel="stylesheet" href="dc-map.css">
+    <p>
+      This is pics of type "<span>{{source}}</span>".
+      <div id="container" style="position:relative">
+	<svg     width="950" height="500" id="map-svg" style="position:absolute">
+	</svg>
+    <div class="gl-view">
+      <canvas class="gl-view" id="chart" width="640" height="700"  style="transform: translateZ(0)">
+      </canvas>
+      <div id="plot1">
     <script id="fragment-shader" type="x-shader/x-fragment">
       precision highp float;
       varying float ignorPoint;
@@ -88,15 +97,6 @@
       }
     </script>
 
-    <p>
-      This is pics of type "<span>{{source}}</span>".
-      <div id="container" style="position:relative">
-	<svg     width="950" height="500" id="map-svg" style="position:absolute">
-	</svg>
-    <div class="gl-view">
-      <canvas class="gl-view" id="chart" width="640" height="700"  style="transform: translateZ(0)">
-      </canvas>
-      <div id="plot1">
 	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
 	<svg width="640" height="480" class="sub-graph" id="map-plot">
 	</svg>
