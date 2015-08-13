@@ -69,11 +69,19 @@ function loadMap ( root, sources, startDate, endDate ) {
 					  color : colors[ i % colors.length ],
 				      } );
 	
-	//plot2Data.push( [sourceKey2, [0, 1], { loadFunction: histogramByDay } ]);
 	plot2Data.push( [sourceKey2, [0, 1, 2], { } ]);
     }
 
 
+
+    /*
+    viz.addView( Map, "#plot1",  
+		 [],
+		 {
+		     lockZoomXY : true,
+		     group : 1,
+		 } );
+    */
 
     viz.addView( ScatterPlot, "#plot1",
 		 plot1Data,
@@ -88,176 +96,16 @@ function loadMap ( root, sources, startDate, endDate ) {
 		     group : 2,
 		 } );
 
+
+
     
     return viz;
 
-    function histogramByDay ( tilePointer, iterator, sourceData, buffer, offset ) {
 
-	var projection = sourceData.projection;
-	var minIndex   = sourceData.xStart;
-	var maxIndex   = sourceData.xEnd;
-
-	var DAY     = 24*60*60*1000;
-	var buckets = Math.ceil((maxIndex - minIndex)/DAY);
-	
-	// If there is not enought for all out the possible points
-	// return so we get a bigger buffer.
-	if ( 2*(buckets.length - offset) < buckets )
-	    return offset;
-
-	while ( nextValue( tilePointer, iterator ) !== 0 ) {
-	    var rawTime = readValue( iterator, projection[0] ) * 1000;
-	    var day     =  Math.floor(rawTime/DAY) * DAY;;
-	    
-	    if ( day < minIndex || day > maxIndex )
-		continue;
-
-	    var time   = rawTime - minIndex;
-	    var day    = Math.floor(time/DAY) * DAY;
-	    var bucket = offset + 2*day/DAY;
-	    
-	    buffer[bucket]   = Math.floor(rawTime/DAY) * DAY;
-	    buffer[bucket+1] += 1;
-	}
-
-
-	var xMin = undefined;
-	var xMax = undefined;
-	var yMin = undefined;
-	var yMax = undefined;
-
-	for ( var i = 1 ; i < buckets ; i++ ) {
-
-	    var xVal = buffer[ offset + i*2    ];
-	    var yVal = buffer[ offset + i*2 +1 ];
-
-	    if ( xMin === undefined || xVal < xMin )
-		xMin = xVal;
-
-	    if ( xMax === undefined || xVal > xMax )
-		xMax = xVal
-
-
-	    if ( yMin === undefined || yVal < yMin )
-		yMin = yVal;
-
-	    if ( yMax === undefined || yVal > yMax )
-		yMax = yVal
-	}
-	
-	sourceData.dataOffset  = offset;
-	sourceData.pointsCount = buckets;
-
-	sourceData.minX = xMin;
-	sourceData.maxX = xMax;
-	sourceData.minY = yMin;
-	sourceData.maxY = yMax;
-
-	return offset + 2*buckets;
-    }
+}
 
 
 /*
-    var startTime = startDate.getTime();
-    var endTime   = endDate.getTime();
-
-    var fetcher = new DataFetcher ( );
-
-    var viz = Viz( root, fetcher );
-
-    var plot1Data = [];
-
-    for ( var i = 0 ; i < sources.length ; i++ ) {
-	plot1Data.push( {
-	    sourceName : sources[i], 
-	    typeName   : typeName  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	} );
-
-    }
-
-
-    var plot2Data = [
-	{
-	    sourceName : sourceName, 
-	    typeName   : "batt voltages set"  , 
-	    indexStart : startTime ,
-	    indexEnd   : endTime   ,
-	}
-    ];
-
-    viz.addView( ScatterPlot, "#plot1",
-		 plot1Data,
-		 {  } );
-    
-    viz.addView( ScatterPlot, "#plot2",  
-		 plot2Data,
-		 {  } );
-    */
-    
-    return viz;
-}
-
-/*
-function loadMap ( root, sources, startDate, endDate ) {
-
-    var startTime = startDate.getTime();
-    var endTime   = endDate.getTime();
-    
-
-    var viz = Viz( root, sources, "example map", startTime, endTime );
-
-    for ( var i = 0 ; i < sources.length ; i++ ) {
-	getMyData( sources[i], startTime, endTime );
-    }
-
-    return viz;
-
-    function getMyData ( source, startTime, endTime ) {
-	if ( startTime != 0 ) //BUG: wont work for epoc tile
-	    getData( source, startTime, endTime, viz.updateGraph );
-    }
-
-}
-*/
-
-/*
-function snapBound ( time, bucketSize ) {
-    return Math.floor( time / bucketSize ) * bucketSize;
-}
-
-function makePath ( dataSource, tileTime ) {
-    var result = '/data/' + dataSource + ':' + tileTime + '.tile';
-    return result;
-}
-
-function getData ( source, start, end, handler ) {
-    var tileStart  = snapBound( start, BUCKET_SIZE );
-    var requestMax = snapBound( end, BUCKET_SIZE ) + BUCKET_SIZE ;
-
-    getDataWorker( source, tileStart, handler );
-
-    // Defer the spicltive work
-    Promise.resolve(true).then( function () {
-	getDataWorker( source, tileStart - BUCKET_SIZE, handler );
-    
-	for ( var i = tileStart ; i < requestMax ; i += BUCKET_SIZE ) {
-	    getDataWorker( source, i, handler );
-	}
-    });
-    
-}
-
-
-
-function getDataWorker ( source,  tileStart, handler ) {
-    var dataPath = makePath( source, tileStart ) ;
-
-    if ( requestedTimes[ dataPath ] != true ) {
-	doFetch( source, dataPath, handler );	
-    }
-}
 
 
 var Viz = new function ( ) {

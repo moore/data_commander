@@ -45,12 +45,35 @@
       
       varying float ignorPoint;
 
-      
-      void main(void) {
-        gl_PointSize = 2.0;
-        gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPositionX.x, aVertexPositionY.x, 1.0, 1.0);
-      
+      /*
+      float M_PI = 3.14159265359;
+      float DEG_TO_RAD = 0.0174532925;
 
+      float scale_factor(float zoom) {
+      float result = 256.0 * pow(2.0, zoom);
+      return result;
+      }
+ 
+      vec2 transform(vec2 point, float zoom) {
+      vec2 result = vec2((((0.5 / M_PI) * point.x)), ((0.5 / M_PI) * point.y)) * scale_factor(zoom);
+      return result;
+      }
+
+      vec2 project(vec2 point) {
+         vec2 result = vec2(point.x * DEG_TO_RAD, log(tan((M_PI / 4.0) + (point.y * DEG_TO_RAD ) / 2.0)));
+         return result;
+      }
+      */
+
+      void main(void) {
+
+        /*vec2 point = transform( project( vec2(aVertexPositionX.x, aVertexPositionY.x) ), 0.50);*/
+      vec2 point = vec2(aVertexPositionX.x, aVertexPositionY.x);
+
+
+        gl_Position = uPMatrix * uMVMatrix * vec4(point, 1.0, 1.0);
+        gl_PointSize = 2.0;
+      
         if (
               (gl_Position.y > yMax)
            || (gl_Position.y < yMin)
@@ -71,16 +94,16 @@
 	<svg     width="950" height="500" id="map-svg" style="position:absolute">
 	</svg>
     <div class="gl-view">
-      <canvas class="gl-view" id="chart" width="1000" height="1050"  style="transform: translateZ(0)">
+      <canvas class="gl-view" id="chart" width="640" height="700"  style="transform: translateZ(0)">
       </canvas>
       <div id="plot1">
 	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	<svg width="1000" height="750" class="sub-graph" id="map-plot">
+	<svg width="640" height="480" class="sub-graph" id="map-plot">
 	</svg>
       </div>
       <div id="plot2">
 	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	<svg width="1000" height="300" class="sub-graph" id="bar-chart">
+	<svg width="640" height="220" class="sub-graph" id="bar-chart">
 	</svg>
       </div>
     </div>

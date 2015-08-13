@@ -802,20 +802,12 @@ var BarChart = new function ( ) {
 
 	fSelectons.addListener( selectionChanged );
 
-	self.doDraw       = doDraw;
-	self.addData      = addData;
+	self.doDraw  = doDraw;
+	self.addData = addData;
 
 	return self;
 
 	function selectionChanged ( keys ) {
-
-	    for ( var i = 0 ; i < keys.length ; i++ ) {
-		var key = keys[i];
-		console.log( "changed %s: %s..%s", key, 
-			     fSelectons.getMin( key ),
-			     fSelectons.getMax( key ) );
-	    }
-
 	    for ( var i = 0 ; i < fSources.length ; i++ )
 		recomputeData( fSources[i] );
 	}
@@ -873,10 +865,6 @@ var BarChart = new function ( ) {
 		.append("g")
 		.classed("content", true)
 		.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")");
-
-	    //BOOG
-	    //fZoom.on("zoom", doZoom);
-	    //fZoom.x( fX );
 
 	    fChart.append("g")
 		.attr("class", "x-axis")
@@ -1046,6 +1034,7 @@ var BarChart = new function ( ) {
 	    var minLon = fSelectons.getMin( "lon" );
 	    var maxLon = fSelectons.getMax( "lon" );
 
+
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*3;
 
@@ -1055,7 +1044,7 @@ var BarChart = new function ( ) {
 		if ( minLon > lon || maxLon < lon )
 		    continue;
 
-		if ( minLat > lat || maxLat < lat )
+		if ( minLat > lat || maxLat < lat ) 
 		    continue;
 
 		var day = snapBound( data[index] + start, DAY ) * 1000;
@@ -1080,6 +1069,7 @@ var BarChart = new function ( ) {
 
 		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
 		    fMaxY = dataArray[i][1];
+
 	    }
 
 	    fD3Data[sourceKey] = dataArray;
@@ -1126,6 +1116,78 @@ var BarChart = new function ( ) {
 
 };
 
+
+var Map = new function ( ) {
+    return factory;
+
+
+    function factory ( fRoot, fGl, fSelectons, options ) {
+	var self = BasePlot( fRoot, options );
+	return constructor( self, fRoot, fGl, fSelectons );
+    }
+
+    function constructor ( self, fRoot, fGl, fSelectons ) {
+	var fSvg    = fRoot.querySelector( "#map-plot" );
+	var fWidth  = 640;
+	var fHeight = 480;
+	var vector; // BUG: rename
+
+	initMap( );
+
+	self.doDraw = doDraw;
+
+	return self;
+
+
+	function doDraw () {
+	    var scale = self.getScale();
+	    var translate = self.getTranslate();
+
+	    d3.select(".land")
+		.attr("transform", "translate(" + translate + ")scale(" + scale[0] + ")")
+		.style("stroke-width", 1 / scale[0])
+	    ;
+	    
+	    
+
+	}
+
+	function initMap ( ) {
+
+	    var projection = d3.geo.mercator()
+		.scale((fWidth + 1) / 2 / Math.PI)
+		.translate([fWidth / 2, fHeight / 2])
+		.precision(.1)
+	    ;
+
+	    var path = d3.geo.path()
+		.projection(projection)
+	    ;
+
+	    var graticule = d3.geo.graticule()
+	    ;
+
+	    var svg = d3.select(fSvg)
+		.attr("width", fWidth)
+		.attr("height", fHeight)
+	    ;
+
+	    d3.json("/data/world-50m.json", function(error, world) {
+		if (error) throw error;
+
+		svg.insert("path", ".graticule")
+		    .datum(topojson.feature(world, world.objects.land))
+		    .attr("class", "land")
+		    .attr("d", path);
+
+	    });
+
+	}
+
+
+    }
+
+};
 
 var Selections = new function ( ) {
     return constructor;
@@ -1217,11 +1279,6 @@ var Viz = new function ( ) {
 	return self;
 
 	function addView ( Type, selector, sources, options ) {
-
-	    // BUG: we will probbly want to remove this
-	    //      restriction at some point
-	    if ( sources.length < 1 )
-		return;
 
 	    var plotRoot = fRoot.querySelector( selector );
 
