@@ -55,15 +55,20 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 
 	// sanity check, display to standard output
 	for i, each := range rawCSVdata {
+		if i == 0 { // Header
+			continue
+		}
+
 		timestamp, _ := strconv.ParseUint(each[0], 10, 64)
 		satellite, _ := strconv.ParseUint(each[1], 16, 16)
 		lat      , _ := strconv.ParseFloat(each[2], 32)
 		lon      , _ := strconv.ParseFloat(each[3], 32)
 
-		scenes[i].Timestamp = timestamp * 1000
-		scenes[i].Satellite = uint16(satellite)
-		scenes[i].Lat       = (float64)(lat)
-		scenes[i].Lon       = (float64)(lon)
+		index := i-1;
+		scenes[index].Timestamp = timestamp * 1000
+		scenes[index].Satellite = uint16(satellite)
+		scenes[index].Lat       = (float64)(lat)
+		scenes[index].Lon       = (float64)(lon)
 
          }
 
@@ -228,21 +233,25 @@ func writeTile ( data []byte, path string) {
 }
 
 func main() {
-	/*if len(os.Args) < 5 {
-		fmt.Fprintln(os.Stderr, "Usage: build_tile inFile outPrefix index-column column1:type <column2:type ... columnN:type>")
+	if len(os.Args) < 4 {
+		fmt.Fprintln(os.Stderr, "Usage: build_tile indexColumn outPrefix inFile ")
 		os.Exit(1)
-	}*/
-
-	dataFile             := os.Args[1]
-	outFileoutFilePrefix := os.Args[2]
-	//indexColumn          := os.Args[3]
-	//columns              := os.Args[4:]
-
-	data, err := parseFile(dataFile)
-
-	if err != nil {
-		panic(err)
 	}
 
-	writeTiles( data, outFileoutFilePrefix )
+	outFileoutFilePrefix := os.Args[2]
+
+	for i := 3; i < len(os.Args) ; i++ {
+
+		dataFile := os.Args[i]
+
+		fmt.Fprintf(os.Stdout, "processing %v:\n", dataFile )
+
+		data, err := parseFile(dataFile)
+		
+		if err != nil {
+			panic(err)
+		}
+
+		writeTiles( data, outFileoutFilePrefix )
+	}
 }

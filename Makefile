@@ -18,7 +18,7 @@ MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s TOTAL_MEMORY=104857600  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
 
 .PHONY: all clean distclean 
 all:: js

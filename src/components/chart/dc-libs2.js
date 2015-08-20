@@ -353,26 +353,18 @@ function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
 }
 
 
-var BasePlot = new function ( ) {
-    var sId   = 0;
-    return factory;
+var ZoomHandler = new function ( ) {
+    return constructor;
 
-    function factory ( fRoot, options ) {
+    function constructor ( fRoot, fGroup, fLockZoom, fX, fY ) {
 
-	var fLockZoom = false;
-	var fGroup    = 0;
-
-	if ( options.lockZoomXY === true )
-	    fLockZoom = true;
-
-	if ( options.group !== undefined )
-	    fGroup = options.group;
-
-	return init( fRoot, fLockZoom, fGroup );
-    }
-
-    function init ( fRoot, fLockZoom, fGroup ) {
 	var self = {};
+
+	if ( fX === undefined )
+	    fX = d3.scale.linear();
+
+	if ( fY === undefined )
+	    fY = d3.scale.linear();
 
 	var fDoZoomY     = false;
 	var fScaleX      = 1;
@@ -381,9 +373,6 @@ var BasePlot = new function ( ) {
 	var fTranslateY  = 0;
 	var fZoom        = d3.behavior.zoom();
 	var fListeners   = [];
-	var fId          = sId++;
-	var fX           = d3.scale.linear();
-	var fY           = d3.scale.linear();
 
 	initScales();
 
@@ -397,20 +386,12 @@ var BasePlot = new function ( ) {
 	
 	initZoomY();
 
-	self.id           = id;
-	self.getGroup     = getGroup;
-	self.doDraw       = undefined;
+	self.domainZoomed = domainZoomed;
 	self.addListener  = addListener;
-	self.addData      = undefined;
-	self.updateView   = updateView;
 	self.getScale     = getScale;
 	self.getTranslate = getTranslate;
-	self.domainZoomed = domainZoomed;
 	self.setXDomain   = setXDomain;
 	self.setYDomain   = setYDomain;
-
-	self._triggerEvents = triggerEvents;
-	self._getZoom       = getZoom;
 
 	return self;
 
@@ -425,21 +406,22 @@ var BasePlot = new function ( ) {
 
 
 	function domainZoomed ( ) {
-	    initScales();
+	    initScales(); //BUG: this should be elewhere
 
-	    var xRange = fX.range();
-	    var xMin = fX.invert(xRange[0]);
-	    var xMax = fX.invert(xRange[1]);
+	    var xDomain = fX.domain();
+	    var yDomain = fY.domain();
 
-	    var yRange = fY.range();
-	    var yMin = fY.invert(yRange[0]);
-	    var yMax = fY.invert(yRange[1]);
-
-	    return { xMin : xMin, xMax : xMax, yMin : yMin, yMax : yMax };
+	    return { 
+		xMin : xDomain[0], 
+		xMax : xDomain[1], 
+		yMin : yDomain[0], 
+		yMax : yDomain[1], 
+	    };
 	}
 
-
 	function setXDomain ( minVal, maxVal ) {
+	    initScales(); //BUG: this should be elewhere
+
 	    fX.domain([minVal, maxVal] );
 	    fZoom.x(fX);
 	}
@@ -448,52 +430,12 @@ var BasePlot = new function ( ) {
 	    fY.domain([minVal, maxVal] );
 	    fZoom.y(fY);
 	}
-
-	function id ( ) {
-	    return fId;
-	}
-
-	function getGroup ( ) {
-	    return fGroup;
-	}
-
-	function getZoom ( ) {
-	    return fZoom;
-	}
 	
 	function addListener ( callback ) {
 	    fListeners.push( callback );
 	}
 
-	function updateView ( sourcePolt, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
 
-	    if ( fGroup !== sourcePolt.getGroup() )
-		return;
-
-	    var newScale  = fZoom.scale();
-	    var translate = fZoom.translate();
-	    
-	    var elementBox = fRoot.getBoundingClientRect();
-	    var width      = elementBox.width;
-	    var height     = elementBox.height;
-
-	    if ( fLockZoom === true || fDoZoomY === false ) {
-		newScale     *= xScaleChange;
-		translate[0] -= ( width * xTranslateChage ) * newScale;
-		fScaleX       = newScale;
-		fTranslateX   = translate[0];
-	    }
-	    
-	    if ( fLockZoom === true || fDoZoomY === true ) {
-		newScale     *= yScaleChange;
-		translate[1] -= ( height * yTranslateChage ) * newScale;
-		fScaleY       = newScale;
-		fTranslateY   = translate[1];
-	    }
-	    
-	    fZoom.scale( newScale );
-	    fZoom.translate( translate );
-	}
 
 
 	function getScale ( ) {
@@ -508,6 +450,10 @@ var BasePlot = new function ( ) {
 
 	function initZoomY ( ) {
 	    var checkbox = fRoot.querySelector( "#zoom-y" );
+
+	    if ( checkbox === null )
+		return;
+
 	    checkbox.onclick = function ( ) {
 
 		var translate = fZoom.translate();
@@ -564,8 +510,44 @@ var BasePlot = new function ( ) {
 	    }
 
 	    triggerEvents( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
+
+	}
+    }
+};
+
+var BasePlot = new function ( ) {
+    var sId = 0;
+    return factory;
+
+    function factory ( fRoot, options ) {
+
+	var fGroup = 0;
+
+	if ( options.group !== undefined )
+	    fGroup = options.group;
+
+	return init( fRoot );
+    }
+
+    function init ( fRoot, fGroup ) {
+	var self = {};
+
+	var fId = sId++;
+
+	self.id           = id;
+	self.doDraw       = undefined;
+	self.addData      = undefined;
+	self.getGroup     = getGroup;
+
+	return self;
+
+	function id ( ) {
+	    return fId;
 	}
 
+	function getGroup ( ) {
+	    return fGroup;
+	}
     }
 };
 
@@ -575,12 +557,17 @@ var ScatterPlot = new function ( ) {
 
     function factory ( fRoot, fGl, fSelectons, options ) {
 
+	var fLockZoom = false;
+
+	if ( options.lockZoomXY === true )
+	    fLockZoom = true;
+
 	var self = BasePlot( fRoot, options );
 
-	return init( self, fRoot, fGl, fSelectons );
+	return init( self, fRoot, fGl, fSelectons, fLockZoom );
     }
 
-    function init ( self, fRoot, fGl, fSelectons ) {
+    function init ( self, fRoot, fGl, fSelectons,  fLockZoom ) {
 
 	var fSources     = [];
 	var fSourceBuffers = [];
@@ -590,12 +577,12 @@ var ScatterPlot = new function ( ) {
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
 	var fGlVars      = initShaders( fRoot, fGl );
-
+	var fZoom        = ZoomHandler( fRoot, self.getGroup(), fLockZoom );
 
 	self.doDraw       = doDraw;
 	self.addData      = addData;
 	
-	self.addListener( updateSelections );
+	fZoom.addListener( updateSelections );
 
 	return self;
 
@@ -622,9 +609,6 @@ var ScatterPlot = new function ( ) {
 	function updateSelections ( ) {
 	    var results = {};
 
-	    var scale     = self.getScale();
-	    var translate = self.getTranslate();
-
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var sourceConfig = fSources[i];
 
@@ -633,7 +617,7 @@ var ScatterPlot = new function ( ) {
 		if ( names[0] === undefined )
 		    continue;
 
-		var zoomedDomain = self.domainZoomed();
+		var zoomedDomain = fZoom.domainZoomed();
 
 		updateKey( names[0], results, zoomedDomain.xMin, zoomedDomain.xMax );
 		updateKey( names[1], results, zoomedDomain.yMin, zoomedDomain.yMax );
@@ -647,7 +631,6 @@ var ScatterPlot = new function ( ) {
 
 		fSelectons.setSelection( key, range.min, range.max );
 	    }
-
 	}
 
 	function addData ( sourceObject, projection, options ) {
@@ -708,8 +691,8 @@ var ScatterPlot = new function ( ) {
 
 		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 
-		var translate = self.getTranslate();
-		var scale     = self.getScale();
+		var translate = fZoom.getTranslate();
+		var scale     = fZoom.getScale();
 
 		doGlDraw( fGl, fGlVars, 
 			  translate[0], translate[1], scale[0], scale[1],
@@ -757,14 +740,18 @@ var ScatterPlot = new function ( ) {
 	    }
 
 	    
-	    self.setXDomain( source.getStart(), source.getEnd() );
-	    self.setYDomain( source.getMin(), source.getMax() );
+	    fZoom.setXDomain( source.getStart(), source.getEnd() );
+
+	    if ( source.getMin() !== undefined && source.getMax() !== undefined )
+		fZoom.setYDomain( source.getMin(), source.getMax() );
+
+	    else
+		fZoom.setYDomain( fMinY, fMaxY );
 
 	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
 
-	    // BUG: we should probbly have a less hacky way of doing this
-	    self._triggerEvents( 1, 1, 0, 0 );
+	    // BUG: need to force redraw()
 	}
     }
 
@@ -772,16 +759,24 @@ var ScatterPlot = new function ( ) {
 
 
 var BarChart = new function ( ) {
+    var DAY = 24*60*60;
     return factory;
 
     function factory ( fRoot, fGl, fSelectons, options ) {
+	var fLockZoom = false;
 
-	var self = BasePlot( fRoot, options );
+	if ( options.lockZoomXY === true )
+	    fLockZoom = true;
+	
+	var fX = d3.time.scale.utc();
+	var fY = d3.scale.linear();
 
-	return init( self, fRoot, fGl, fSelectons );
+	var self = BasePlot( fRoot, options, fX, fY );
+
+	return init( self, fRoot, fGl, fSelectons, fX, fY, fLockZoom );
     }
 
-    function init ( self, fRoot, fGl, fSelectons ) {
+    function init ( self, fRoot, fGl, fSelectons, fX, fY, fLockZoom ) {
 
 	var fSources     = [];
 	var fListeners   = [];
@@ -790,11 +785,10 @@ var BarChart = new function ( ) {
 	var fMaxY        = undefined;
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
+	var fGroup       = undefined;
+	var fZoom        = undefined;
 
-	var fZoom        = self._getZoom();
 	var fChart       = undefined;
-	var fX           = undefined;
-	var fY           = undefined;
 	var fXAxis       = undefined;
 	var fYAxis       = undefined;
 
@@ -810,8 +804,13 @@ var BarChart = new function ( ) {
 	return self;
 
 	function selectionChanged ( keys ) {
+	    fMinY = undefined;
+	    fMaxY = undefined;
+
 	    for ( var i = 0 ; i < fSources.length ; i++ )
 		recomputeData( fSources[i] );
+
+	    doDraw();
 	}
 	
 
@@ -819,14 +818,17 @@ var BarChart = new function ( ) {
 
 	    var elementBox = fRoot.getBoundingClientRect();
 
-
 	    width  = elementBox.width - fMargin.left - fMargin.right;
 	    height = elementBox.height - fMargin.top - fMargin.bottom;
+
+	    var bandWidth = width/((fMaxX -fMinX)/1000/DAY);
+
+	    fGroup.rangeRoundBands([0, bandWidth], .1);
 
 	    fX.range([0, width]);
 	    fY.range([height, 0]);
 
-	    fChart.select(".content")
+	    fChart
 	    	.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")")
 	    ;
 
@@ -844,14 +846,8 @@ var BarChart = new function ( ) {
 	function initChart ( ) {
 	    
 	    var elementBox = fRoot.getBoundingClientRect();
-
-	    width  = elementBox.width - fMargin.left - fMargin.right;
-	    height = elementBox.height - fMargin.top - fMargin.bottom;
-
-	    fX = d3.time.scale.utc();
 	    
-	    fY = d3.scale.linear()
-		.range([0, height]);
+	    fGroup = d3.scale.ordinal();
 
 	    fXAxis = d3.svg.axis()
 		.scale(fX)
@@ -866,11 +862,9 @@ var BarChart = new function ( ) {
 	    fChart = d3.select(fRoot).select("#bar-chart")
 		.append("g")
 		.classed("content", true)
-		.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")");
 
 	    fChart.append("g")
 		.attr("class", "x-axis")
-		.attr("transform", "translate(0," + height + ")")
 		.call(fXAxis);
 
 	    fChart.append("g")
@@ -883,13 +877,13 @@ var BarChart = new function ( ) {
 		.style("text-anchor", "end")
 		.text("Count Per-day");
 
-	    
+
+	    fZoom = new ZoomHandler ( fChart.node(), self.getGroup(),
+				      fLockZoom, fX, fY );
+	    fZoom.addListener( doDraw );
+	    resize();
 	}
 
-
-	function doZoom ( ) {
-	    doDraw();
-	}
 
 	function addData ( sourceObject, projection, options ) {
 
@@ -917,6 +911,12 @@ var BarChart = new function ( ) {
 		}
 	    }
 
+	    updateXDomain( sourceObject );
+
+	    sourceObject.addListener( handleNewData, sourceConfig );
+	}
+
+	function updateXDomain( sourceObject ) {
 	    var start = sourceObject.getStart();
 	    var end   = sourceObject.getEnd();
 	    
@@ -926,9 +926,7 @@ var BarChart = new function ( ) {
 	    if ( fMaxX === undefined || fMaxX < end )
 		fMaxX = end;
 
-	    fX.domain( [ fMinX, fMaxX ] );
-
-	    sourceObject.addListener( handleNewData, sourceConfig );
+	    fZoom.setXDomain( fMinX, fMaxX );
 	}
 
 	function formatColor ( parts ) {
@@ -939,9 +937,14 @@ var BarChart = new function ( ) {
 	}
 
 	function doDraw ( ) {
+
+	    if ( fMaxY === undefined )
+		return;
+
 	    resize( );
 
 	    var sourceData = [];
+	    var sourceNames = [];
 
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var source       = fSources[i].sourceObject;
@@ -950,16 +953,19 @@ var BarChart = new function ( ) {
 		var plotData     = fD3Data[ sourceKey ];
 		if ( plotData !== undefined ) {
 		    sourceData.push( [ i, fSources[i].name, plotData, color ] );
+		    sourceNames.push( i );
 		}
 	    }
 
-	    fY.domain([0, fMaxY]);
-	    fX.ticks( d3.time.day );
+	    fGroup.domain( sourceNames );
 
+	    fY.domain([0, fMaxY]);
 
 	    fChart.select(".x-axis")
 		.call(fXAxis)
 	    ;
+
+	    fX.ticks( d3.time.day );
 
 	    fChart.select(".y-axis")
 		.call(fYAxis)
@@ -973,7 +979,7 @@ var BarChart = new function ( ) {
 		.append( 'g' )
 	        .classed( 'bar-chart-data', true )
 		.attr( 'transform', function (d, i) {
-		    return "translate( " + ( 10 * i - (10 *sourceData.length)/2 ) + ", 0)";
+		    return "translate( " + fGroup(d[0]) + ", 0)";
 		})
 	    	.style("fill", function(d) { return formatColor(d[3]); })
 
@@ -981,7 +987,7 @@ var BarChart = new function ( ) {
 
 	    sources
 		.attr( 'transform', function (d, i) {
-		    return "translate( " + ( 10 * i - (10 *sourceData.length)/2 ) + ", 0)";
+		    return "translate( " + fGroup(d[0]) + ", 0)";
 		})
 	    	.style("fill", function(d) { return formatColor(d[3]); })
 	    ;
@@ -998,13 +1004,14 @@ var BarChart = new function ( ) {
 		.append( 'rect' )
 		.attr( 'x', function (d) { return fX( d[0] ) } )
 		.attr( 'y', function (d) { return fY( d[1] ) } )
-	    	.attr( 'width', 10 )
+	    	.attr( 'width', fGroup.rangeBand() )
 		.attr( 'height', function (d) { return height - fY( d[1] ) } )
 	    ;
 
 	    bars
 		.attr( 'x', function (d) { return fX( d[0] ) } )
 		.attr( 'y', function (d) { return fY( d[1] ) } )
+	    	.attr( 'width', fGroup.rangeBand() )
 		.attr( 'height', function (d) {  return height - fY( d[1] ) } )
 
 	    ;
@@ -1028,14 +1035,12 @@ var BarChart = new function ( ) {
 	    var stop       = bufferInfo.offset/projection.length;
 	    var dataArray  = [];
 	    var dataIndex  = {};
-	    var DAY        = 24*60*60;
 	    
 	    var minLat = fSelectons.getMin( "lat" );
 	    var maxLat = fSelectons.getMax( "lat" );
 
 	    var minLon = fSelectons.getMin( "lon" );
 	    var maxLon = fSelectons.getMax( "lon" );
-
 
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*3;
@@ -1061,9 +1066,6 @@ var BarChart = new function ( ) {
 		
 		tupple[1]++;
 	    }
-
-	    fMinY = undefined;
-	    fMaxY = undefined;
 
 	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
 		if ( fMinY === undefined || fMinY > dataArray[i][1] )
@@ -1094,7 +1096,6 @@ var BarChart = new function ( ) {
 
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
-		// BUG: I don't think I free this.
 		var tilePointer  = loadBuffer( tileArray );
 		var dataInfo     = initSorceData( start, end, projection );
 
@@ -1107,12 +1108,14 @@ var BarChart = new function ( ) {
 
 
 		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
+
+		freeBuffer( tilePointer );
 	    }
 
 	    recomputeData( sourceConfig );
 
-	    // BUG: we should probbly have a less hacky way of doing this
-	    self._triggerEvents( 1, 1, 0, 0 );
+	    // BUG: we should do this in a way controled by he Viz
+	    doDraw();
 	}
     }
 
@@ -1142,8 +1145,8 @@ var Map = new function ( ) {
 
 
 	function doDraw () {
-	    var scale = self.getScale();
-	    var translate = self.getTranslate();
+	    var scale = fZoom.getScale();
+	    var translate = fZoom.getTranslate();
 
 	    d3.select(".land")
 		.attr("transform", "translate(" + translate + ")scale(" + scale[0] + ")")
@@ -1219,13 +1222,27 @@ var Selections = new function ( ) {
 	    fBatcher.batch( notifyChanges );
 	}
 
+
 	function getMin ( key ) {
-	    return fSelections[ key ][0];
+	    return getMinOrMax( key, 0 );
 	}
 
+
 	function getMax ( key ) {
-	    return fSelections[ key ][1];
+	    return getMinOrMax( key, 1 );
 	}
+
+
+	function getMinOrMax ( key, index ) {
+	    var result = undefined;
+	    var value = fSelections[ key ];
+
+	    if ( value !== undefined )
+		result = value[index];
+
+	    return result;
+	}
+
 
 	function notifyChanges ( ) {
 	    var keys = Object.keys( fChangedKeys );
@@ -1276,6 +1293,8 @@ var Viz = new function ( ) {
 	var fZoomGroups    = {};
 	var fSelections    = new Selections ();
 
+	fSelections.addListener( drawGraph );
+
 	return self;
 
 	function addView ( Type, selector, sources, options ) {
@@ -1300,24 +1319,7 @@ var Viz = new function ( ) {
 		plot.addData( sourceObject, projection, sourceOptions );
 	    }
 
-	    plot.addListener( plotChange );
 	}
-
-	function plotChange ( plot, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
-	    var changedId = plot.id();
-
-	    for ( var i = 0 ; i < fViews.length ; i++ ) {
-		var current = fViews[ i ];
-
-		if ( current.id() === changedId )
-		    continue;
-
-		current.updateView( plot, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
-	    }
-
-	    schudleDraw();
-	}
-
 
 	function addData ( sourceName, typeName, start, end, options ) {
 	    var xRange;
@@ -1452,6 +1454,7 @@ function doGlDraw ( gl, glVars,
 
     var colorLoc = gl.getUniformLocation(glVars.shader, "color");
     gl.uniform3fv(colorLoc, color );
+
 
     for ( var i = 0 ; i < data.length ; i++ ) {
 	var info = data[i];
