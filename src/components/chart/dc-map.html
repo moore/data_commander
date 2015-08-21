@@ -13,13 +13,12 @@
     <p>
       This is pics of type "<span>{{source}}</span>".
       <div id="container" style="position:relative">
-	<svg     width="950" height="500" id="map-svg" style="position:absolute">
-	</svg>
-    <div class="gl-view">
-      <canvas class="gl-view" id="chart" width="640" height="700"  style="transform: translateZ(0)">
-      </canvas>
-      <div id="plot1">
-    <script id="fragment-shader" type="x-shader/x-fragment">
+	<div class="gl-view" width="1200" height="700">
+	  <canvas class="gl-view" id="chart" width="1200" height="700"  style="transform: translateZ(0)">
+	  </canvas>
+	  <svg class="debug" width="1000" height="30" style="float:left"></svg>
+	  <div id="plot1">
+	    <script id="fragment-shader" type="x-shader/x-fragment">
       precision highp float;
       varying float ignorPoint;
       uniform vec3 color;
@@ -39,8 +38,8 @@
 
         gl_FragColor = vec4(color, 0.5);
       }
-    </script>
-    <script id="vertex-shader" type="x-shader/x-vertex">
+	    </script>
+	    <script id="vertex-shader" type="x-shader/x-vertex">
       precision highp float;
       attribute vec2 aVertexPositionX;
       attribute vec2 aVertexPositionY;
@@ -95,18 +94,20 @@
         }
 
       }
-    </script>
+			       </script>
 
-	<svg width="640" height="480" class="sub-graph" id="map-plot">
-	</svg>
+	    <svg width="600" height="300" class="sub-graph" id="map-plot">
+	    </svg>
+	  </div>
+	  <div id="plot2">
+	    <div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
+	    <svg width="600" height="220" class="sub-graph" id="bar-chart">
+	    </svg>
+	  </div>
+
+
+	</div>
       </div>
-      <div id="plot2">
-	<div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	<svg width="640" height="220" class="sub-graph" id="bar-chart">
-	</svg>
-      </div>
-    </div>
-   </div>
   </template>
   <script rel="import" src="dc-libs2.js"></script>
   <script rel="import" src="dc-map.js"></script>

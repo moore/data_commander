@@ -25,9 +25,14 @@ body {
     color     : white;
 }
 
+#plot1 {
+    float : left;
+}
+
 #plot2 {
     stroke : white;
     fill   : white;
+    float  : left;
 }
 
 .sub-graph {

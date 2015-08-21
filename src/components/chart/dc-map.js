@@ -45,6 +45,9 @@ new function() {
 
 	var viz = Viz( root, fetcher );
 
+	viz.setSelection( 'lon' , -180, 180 );
+	viz.setSelection( 'lat' , -90, 90 );
+	viz.setSelection( 'time', startTime , endTime );
 
 	var plot1Data = [];
 	var plot2Data = [];

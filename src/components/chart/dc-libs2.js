@@ -400,14 +400,17 @@ var ZoomHandler = new function ( ) {
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
 
-	    fX.range( [0, width] );
+	    fX.range( [width, 0] );
 	    fY.range( [0, height] );
+
+	    fZoom
+		.x(fX)
+		.y(fY)
+	    ;
 	}
 
 
 	function domainZoomed ( ) {
-	    initScales(); //BUG: this should be elewhere
-
 	    var xDomain = fX.domain();
 	    var yDomain = fY.domain();
 
@@ -577,12 +580,22 @@ var ScatterPlot = new function ( ) {
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
 	var fGlVars      = initShaders( fRoot, fGl );
-	var fZoom        = ZoomHandler( fRoot, self.getGroup(), fLockZoom );
+	var fZoom        = d3.behavior.zoom();
+	var fX           = d3.scale.linear();
+	var fY           = d3.scale.linear();
+
+	
+        fZoom
+	    .x(fX)
+	    .y(fY)
+	    .on("zoom", updateSelections)
+	;
+
+	d3.select(fRoot).call(fZoom);
 
 	self.doDraw       = doDraw;
 	self.addData      = addData;
 	
-	fZoom.addListener( updateSelections );
 
 	return self;
 
@@ -609,6 +622,9 @@ var ScatterPlot = new function ( ) {
 	function updateSelections ( ) {
 	    var results = {};
 
+	    var xDomain = fX.domain();
+	    var yDomain = fY.domain();
+
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var sourceConfig = fSources[i];
 
@@ -617,20 +633,22 @@ var ScatterPlot = new function ( ) {
 		if ( names[0] === undefined )
 		    continue;
 
-		var zoomedDomain = fZoom.domainZoomed();
 
-		updateKey( names[0], results, zoomedDomain.xMin, zoomedDomain.xMax );
-		updateKey( names[1], results, zoomedDomain.yMin, zoomedDomain.yMax );
+		updateKey( names[0], results, xDomain[0], xDomain[1] );
+		updateKey( names[1], results, yDomain[0], yDomain[1] );
 	    }
+
 
 	    var keys = Object.keys( results );
 
+	    
 	    for ( var i = 0 ; i < keys.length ; i++ ) {
 		var key   = keys[i];
 		var range = results[key];
-
+		
 		fSelectons.setSelection( key, range.min, range.max );
 	    }
+
 	}
 
 	function addData ( sourceObject, projection, options ) {
@@ -670,7 +688,7 @@ var ScatterPlot = new function ( ) {
 	    var left       = fRoot.offsetLeft;
 	    var width      = elementBox.width;
 	    var height     = elementBox.height;
-	    
+
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var sourceConfig = fSources[i];
 		var bufferInfo   = sourceConfig.bufferInfo;
@@ -683,19 +701,21 @@ var ScatterPlot = new function ( ) {
 		var sourceKey    = source.getId();
 		var data         = fSourceBuffers[ sourceKey ];
 
+		indexMin = fSelectons.getMin( 'lon' );
+		indexMax = fSelectons.getMax( 'lon' );
+		valueMin = fSelectons.getMin( 'lat' );
+		valueMax = fSelectons.getMax( 'lat' );
+
+
 		if ( valueMin === undefined )
-		    valueMin =  fMinY;
+		    valueMin = fMinY;
 
 		if ( valueMax === undefined )
-		    valueMax =  fMaxY;
+		    valueMax = fMaxY;
 
 		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
-
-		var translate = fZoom.getTranslate();
-		var scale     = fZoom.getScale();
-
+		
 		doGlDraw( fGl, fGlVars, 
-			  translate[0], translate[1], scale[0], scale[1],
 			  indexMin, indexMax, valueMin, valueMax, 
 			  top, left, width, height, data, color );
 	    }
@@ -739,19 +759,42 @@ var ScatterPlot = new function ( ) {
 		    fMaxY = dataInfo.maxY;
 	    }
 
+	    var elementBox = fRoot.getBoundingClientRect();
+	    var width      = elementBox.width;
+	    var height     = elementBox.height;
+
+	    	    
+	    fX.range( [0, width] );
+	    fY.range( [height, 0] );
+
+	    fX.domain(
+		[ fSelectons.getMin( 'lon' ),
+		  fSelectons.getMax( 'lon' ) ] );
+
+	    fY.domain(
+		[ fSelectons.getMin( 'lat' ),
+		  fSelectons.getMax( 'lat' ) ] );
+
+	    fZoom.x(fX);
+	    fZoom.y(fY);
 	    
-	    fZoom.setXDomain( source.getStart(), source.getEnd() );
+	    /*
+	    fX.domain( [source.getStart(), source.getEnd()] );
+	    fZoom.x(fX);
 
 	    if ( source.getMin() !== undefined && source.getMax() !== undefined )
-		fZoom.setYDomain( source.getMin(), source.getMax() );
+		fY.domain([source.getMin(), source.getMax()]);
 
 	    else
-		fZoom.setYDomain( fMinY, fMaxY );
+		fY.domain([fMinY, fMaxY]);
+	    
+	    fZoom.y(fY);
+	    */
 
 	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
 
-	    // BUG: need to force redraw()
+	    doDraw() ; //BUG: should be handled by the viz
 	}
     }
 
@@ -763,20 +806,15 @@ var BarChart = new function ( ) {
     return factory;
 
     function factory ( fRoot, fGl, fSelectons, options ) {
-	var fLockZoom = false;
-
-	if ( options.lockZoomXY === true )
-	    fLockZoom = true;
-	
 	var fX = d3.time.scale.utc();
 	var fY = d3.scale.linear();
 
 	var self = BasePlot( fRoot, options, fX, fY );
 
-	return init( self, fRoot, fGl, fSelectons, fX, fY, fLockZoom );
+	return init( self, fRoot, fGl, fSelectons, fX, fY );
     }
 
-    function init ( self, fRoot, fGl, fSelectons, fX, fY, fLockZoom ) {
+    function init ( self, fRoot, fGl, fSelectons, fX, fY ) {
 
 	var fSources     = [];
 	var fListeners   = [];
@@ -786,7 +824,7 @@ var BarChart = new function ( ) {
 	var fMinX        = undefined;
 	var fMaxX        = undefined;
 	var fGroup       = undefined;
-	var fZoom        = undefined;
+	var fZoom        = d3.behavior.zoom();
 
 	var fChart       = undefined;
 	var fXAxis       = undefined;
@@ -810,6 +848,7 @@ var BarChart = new function ( ) {
 	    for ( var i = 0 ; i < fSources.length ; i++ )
 		recomputeData( fSources[i] );
 
+	    fY.domain([0, fMaxY]);
 	    doDraw();
 	}
 	
@@ -878,9 +917,13 @@ var BarChart = new function ( ) {
 		.text("Count Per-day");
 
 
-	    fZoom = new ZoomHandler ( fChart.node(), self.getGroup(),
-				      fLockZoom, fX, fY );
-	    fZoom.addListener( doDraw );
+	    fZoom
+		.x(fX)
+		.on("zoom", doDraw)
+	    ;
+
+	    d3.select(fRoot).call(fZoom);
+
 	    resize();
 	}
 
@@ -926,7 +969,8 @@ var BarChart = new function ( ) {
 	    if ( fMaxX === undefined || fMaxX < end )
 		fMaxX = end;
 
-	    fZoom.setXDomain( fMinX, fMaxX );
+	    fX.domain( [fMinX, fMaxX] );
+	    fZoom.x(fX);
 	}
 
 	function formatColor ( parts ) {
@@ -937,10 +981,6 @@ var BarChart = new function ( ) {
 	}
 
 	function doDraw ( ) {
-
-	    if ( fMaxY === undefined )
-		return;
-
 	    resize( );
 
 	    var sourceData = [];
@@ -959,8 +999,6 @@ var BarChart = new function ( ) {
 
 	    fGroup.domain( sourceNames );
 
-	    fY.domain([0, fMaxY]);
-
 	    fChart.select(".x-axis")
 		.call(fXAxis)
 	    ;
@@ -971,6 +1009,7 @@ var BarChart = new function ( ) {
 		.call(fYAxis)
 	    ;
 
+	    //console.log( "sourceData: ", sourceData ); //BOOG
 	    var sources = fChart.selectAll( ".bar-chart-data" )
 		.data( sourceData, function ( d ) { return d[0] } )
 	    ;
@@ -1042,11 +1081,20 @@ var BarChart = new function ( ) {
 	    var minLon = fSelectons.getMin( "lon" );
 	    var maxLon = fSelectons.getMax( "lon" );
 
+	    //console.log( "filter lat %s..%s lon %s..%s", minLat, maxLat, minLon, maxLon ); //BOOG
+
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*3;
 
 		var lat = data[index+1];
 		var lon = data[index+2];
+
+		if ( !(
+		           lon < maxLon 
+			&& lon > minLon 
+			&& lat > minLat 
+			&& lat < maxLat ) )
+		    continue;
 
 		if ( minLon > lon || maxLon < lon )
 		    continue;
@@ -1067,6 +1115,7 @@ var BarChart = new function ( ) {
 		tupple[1]++;
 	    }
 
+	    //console.log( "%s: %s days with data", sourceKey, dataArray.length ); //BOOG
 	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
 		if ( fMinY === undefined || fMinY > dataArray[i][1] )
 		    fMinY = dataArray[i][1];
@@ -1074,6 +1123,7 @@ var BarChart = new function ( ) {
 		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
 		    fMaxY = dataArray[i][1];
 
+		//console.log( "  %s hand %s", new Date(dataArray[i][0]), dataArray[i][1]); //BOOG
 	    }
 
 	    fD3Data[sourceKey] = dataArray;
@@ -1113,6 +1163,7 @@ var BarChart = new function ( ) {
 	    }
 
 	    recomputeData( sourceConfig );
+	    fY.domain([0, fMaxY]);
 
 	    // BUG: we should do this in a way controled by he Viz
 	    doDraw();
@@ -1145,8 +1196,8 @@ var Map = new function ( ) {
 
 
 	function doDraw () {
-	    var scale = fZoom.getScale();
-	    var translate = fZoom.getTranslate();
+	    var scale = fZoom.scale();
+	    var translate = fZoom.translate();
 
 	    d3.select(".land")
 		.attr("transform", "translate(" + translate + ")scale(" + scale[0] + ")")
@@ -1285,6 +1336,7 @@ var Viz = new function ( ) {
 	var self = { };
 	self.addView = addView;
 	self.addData = addData;
+	self.setSelection =  setSelection;
 
 	var fSourceKeys    = [];
 	var fDataSources   = {};
@@ -1293,9 +1345,13 @@ var Viz = new function ( ) {
 	var fZoomGroups    = {};
 	var fSelections    = new Selections ();
 
-	fSelections.addListener( drawGraph );
+	fSelections.addListener( schudleDraw );
 
 	return self;
+
+	function setSelection ( key, minValue, maxValue ) {
+	    fSelections.setSelection( key, minValue, maxValue );
+	}
 
 	function addView ( Type, selector, sources, options ) {
 
@@ -1388,9 +1444,8 @@ var Viz = new function ( ) {
 
 
 function doGlDraw ( gl, glVars,
-		    fTranslateX, fTranslateY, fScaleX, fScaleY,
 		    xMin, xMax, yMin, yMax,
-	    top, left, width, height, data, color ) {
+		    top, left, width, height, data, color ) {
 
     var glWidth  = gl.canvas.clientWidth;
     var glHeight = gl.canvas.clientHeight;
@@ -1408,16 +1463,9 @@ function doGlDraw ( gl, glVars,
     mat4.identity(matrix);
     
     // BUG: I don't understand the need for the -10 z translation
-    vec3.set(translation, -(width/2), -top, -10 );
+    //vec3.set(translation, left -width, -top, -10 );
+    vec3.set(translation, left - width, -top - height, -10 );
     mat4.translate(matrix, matrix, translation);
-
-    // Translate based on zoom
-    vec3.set(translation,  fTranslateX, -fTranslateY, 0 );
-    mat4.translate(matrix, matrix, translation);
-
-    // Scale based on zoom
-    vec3.set(translation, fScaleX, fScaleY, 1);
-    mat4.scale(matrix, matrix, translation);
 
     var xScale = width/(xMax - xMin);
     var yScale = height/(yMax - yMin);
@@ -1425,10 +1473,11 @@ function doGlDraw ( gl, glVars,
     // Scale from base units to pixles
     vec3.set(translation, xScale, yScale, 1);
     mat4.scale(matrix, matrix, translation);
-
+    
     // Move data origan to bottom left
-    vec3.set(translation, 0, yMin, 0);
+    vec3.set(translation, -xMin -180, -yMin, 0);
     mat4.translate(matrix, matrix, translation);
+
 
     var pUniform = gl.getUniformLocation(glVars.shader, "uPMatrix");
     gl.uniformMatrix4fv(pUniform, false, perspectiveMatrix);
