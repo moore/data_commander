@@ -830,7 +830,7 @@ var BarChart = new function ( ) {
 	var fXAxis       = undefined;
 	var fYAxis       = undefined;
 
-	var fMargin = {top: 30, right: 60, bottom: 30, left: 60};
+	var fMargin = {top: 30, right: 60, bottom: 80, left: 60};
 
 	initChart( );
 
@@ -901,10 +901,12 @@ var BarChart = new function ( ) {
 	    fChart = d3.select(fRoot).select("#bar-chart")
 		.append("g")
 		.classed("content", true)
+	    ;
 
 	    fChart.append("g")
 		.attr("class", "x-axis")
-		.call(fXAxis);
+		.call(fXAxis)
+	    ;
 
 	    fChart.append("g")
 		.attr("class", "y-axis")
@@ -914,7 +916,8 @@ var BarChart = new function ( ) {
 		.attr("y", 6)
 		.attr("dy", ".71em")
 		.style("text-anchor", "end")
-		.text("Count Per-day");
+		.text("Count Per-day")
+	    ;
 
 
 	    fZoom
@@ -1001,6 +1004,11 @@ var BarChart = new function ( ) {
 
 	    fChart.select(".x-axis")
 		.call(fXAxis)
+		.selectAll("text")
+		.attr("y", 0)
+		.attr("x", 35)
+		.attr("dy", ".35em")
+		.attr("transform", "rotate(90)")
 	    ;
 
 	    fX.ticks( d3.time.day );
