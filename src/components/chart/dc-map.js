@@ -90,6 +90,7 @@ new function() {
 			 lockZoomXY : true,
 			 group      : 1,
 		     } );
+
 	
 	viz.addView( BarChart, "#plot2",  
 		     plot2Data,

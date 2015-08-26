@@ -23,6 +23,7 @@
       uniform vec3 color;
 
       void main(void) {
+
         if ( ignorPoint > 0.5 )
            discard;
 
@@ -49,6 +50,7 @@
       uniform float xMin;
       uniform float yMax;
       uniform float yMin;
+      uniform float uPointSize;
       
       varying float ignorPoint;
 
@@ -79,7 +81,8 @@
 
 
         gl_Position = uPMatrix * uMVMatrix * vec4(point, 1.0, 1.0);
-        gl_PointSize = 2.0;
+        gl_PointSize = uPointSize;
+        
       
         if (
               (gl_Position.y > yMax)

@@ -558,7 +558,7 @@ var BasePlot = new function ( ) {
 var ScatterPlot = new function ( ) {
     return factory;
 
-    function factory ( fRoot, fGl, fSelectons, options ) {
+    function factory ( fViz, fRoot, fGl, fSelectons, options ) {
 
 	var fLockZoom = false;
 
@@ -567,10 +567,10 @@ var ScatterPlot = new function ( ) {
 
 	var self = BasePlot( fRoot, options );
 
-	return init( self, fRoot, fGl, fSelectons, fLockZoom );
+	return init( self, fViz, fRoot, fGl, fSelectons, fLockZoom );
     }
 
-    function init ( self, fRoot, fGl, fSelectons,  fLockZoom ) {
+    function init ( self, fViz, fRoot, fGl, fSelectons,  fLockZoom ) {
 
 	var fSources     = [];
 	var fSourceBuffers = [];
@@ -583,7 +583,6 @@ var ScatterPlot = new function ( ) {
 	var fZoom        = d3.behavior.zoom();
 	var fX           = d3.scale.linear();
 	var fY           = d3.scale.linear();
-
 	
         fZoom
 	    .x(fX)
@@ -700,6 +699,7 @@ var ScatterPlot = new function ( ) {
 		var color        = source.getColor();
 		var sourceKey    = source.getId();
 		var data         = fSourceBuffers[ sourceKey ];
+		var fieldsCount  = sourceConfig.projection.length;
 
 		indexMin = fSelectons.getMin( 'lon' );
 		indexMax = fSelectons.getMax( 'lon' );
@@ -715,7 +715,7 @@ var ScatterPlot = new function ( ) {
 
 		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 		
-		doGlDraw( fGl, fGlVars, 
+		doGlDraw( fGl, fGlVars, fieldsCount,
 			  indexMin, indexMax, valueMin, valueMax, 
 			  top, left, width, height, data, color );
 	    }
@@ -794,7 +794,7 @@ var ScatterPlot = new function ( ) {
 	    fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 	    fGl.bufferData(fGl.ARRAY_BUFFER, bufferInfo.data, fGl.STATIC_DRAW);
 
-	    doDraw() ; //BUG: should be handled by the viz
+	    fViz.schudleDraw();
 	}
     }
 
@@ -805,16 +805,16 @@ var BarChart = new function ( ) {
     var DAY = 24*60*60;
     return factory;
 
-    function factory ( fRoot, fGl, fSelectons, options ) {
+    function factory ( fViz, fRoot, fGl, fSelectons, options ) {
 	var fX = d3.time.scale.utc();
 	var fY = d3.scale.linear();
 
 	var self = BasePlot( fRoot, options, fX, fY );
 
-	return init( self, fRoot, fGl, fSelectons, fX, fY );
+	return init( self, fViz, fRoot, fGl, fSelectons, fX, fY );
     }
 
-    function init ( self, fRoot, fGl, fSelectons, fX, fY ) {
+    function init ( self, fViz, fRoot, fGl, fSelectons, fX, fY ) {
 
 	var fSources     = [];
 	var fListeners   = [];
@@ -829,6 +829,8 @@ var BarChart = new function ( ) {
 	var fChart       = undefined;
 	var fXAxis       = undefined;
 	var fYAxis       = undefined;
+	var fDataBuffer  = new Float32Array( 1000 * 2 );
+	var fDays        = 0;
 
 	var fMargin = {top: 30, right: 60, bottom: 80, left: 60};
 
@@ -849,7 +851,7 @@ var BarChart = new function ( ) {
 		recomputeData( fSources[i] );
 
 	    fY.domain([0, fMaxY]);
-	    doDraw();
+	    fViz.schudleDraw();
 	}
 	
 
@@ -922,7 +924,7 @@ var BarChart = new function ( ) {
 
 	    fZoom
 		.x(fX)
-		.on("zoom", doDraw)
+		.on("zoom", fViz.schudleDraw)
 	    ;
 
 	    d3.select(fRoot).call(fZoom);
@@ -1070,7 +1072,6 @@ var BarChart = new function ( ) {
 
 	
 	function recomputeData ( sourceConfig ) {
-
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
@@ -1080,8 +1081,6 @@ var BarChart = new function ( ) {
 
 	    var data       = bufferInfo.data;
 	    var stop       = bufferInfo.offset/projection.length;
-	    var dataArray  = [];
-	    var dataIndex  = {};
 	    
 	    var minLat = fSelectons.getMin( "lat" );
 	    var maxLat = fSelectons.getMax( "lat" );
@@ -1089,7 +1088,20 @@ var BarChart = new function ( ) {
 	    var minLon = fSelectons.getMin( "lon" );
 	    var maxLon = fSelectons.getMax( "lon" );
 
-	    //console.log( "filter lat %s..%s lon %s..%s", minLat, maxLat, minLon, maxLon ); //BOOG
+	    var minTime = fSelectons.getMin( "time" );
+	    var maxTime = fSelectons.getMax( "time" );
+
+	    fDays = Math.ceil( (maxTime - minTime)/(DAY * 1000) );
+	    var firstDay = snapBound( minTime, DAY * 1000 );
+
+	    if ( fDataBuffer.length * 2 < fDays ) {
+		console.log( "extending data buffer to %s", fDays * 4 );
+		// Expand to be twice the required number of days
+		fDataBuffer = new float32array( fDays * 4 );
+	    }
+
+	    for ( var i = 0 ; i < fDays *2 ; i++ )
+		  fDataBuffer[i] = 0;
 
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*3;
@@ -1112,30 +1124,33 @@ var BarChart = new function ( ) {
 
 		var day = snapBound( data[index] + start, DAY ) * 1000;
 
-		var tupple = dataIndex[ day ];
-
-		if ( tupple === undefined ) {
-		    tupple = [ day, 0 ];
-		    dataArray.push( tupple );
-		    dataIndex[ day ] = tupple;
-		}
 		
-		tupple[1]++;
+		if ( day < firstDay )
+		    continue;
+		
+		var dataIndex = 2 * (day - firstDay)/(DAY * 1000);
+
+		fDataBuffer[dataIndex] = day;
+		fDataBuffer[dataIndex+1]++;
 	    }
 
-	    //console.log( "%s: %s days with data", sourceKey, dataArray.length ); //BOOG
-	    for ( var i = 0 ; i < dataArray.length ; i++ ) {
-		if ( fMinY === undefined || fMinY > dataArray[i][1] )
-		    fMinY = dataArray[i][1];
+	    var resultData = [];
 
-		if ( fMaxY === undefined || fMaxY < dataArray[i][1] )
-		    fMaxY = dataArray[i][1];
+	    for ( var i = 0 ; i < fDays ; i++ ) {
+		var index = i*2;
+		var time  = fDataBuffer[index];
+		var value = fDataBuffer[index+1];
 
-		//console.log( "  %s hand %s", new Date(dataArray[i][0]), dataArray[i][1]); //BOOG
+		if ( fMinY === undefined || value )
+		    fMinY = value;
+
+		if ( fMaxY === undefined || fMaxY < value )
+		    fMaxY = value;
+
+		resultData.push( [time, value] );
 	    }
 
-	    fD3Data[sourceKey] = dataArray;
-
+	    fD3Data[sourceKey] = resultData;
 	}
 
 
@@ -1173,8 +1188,7 @@ var BarChart = new function ( ) {
 	    recomputeData( sourceConfig );
 	    fY.domain([0, fMaxY]);
 
-	    // BUG: we should do this in a way controled by he Viz
-	    doDraw();
+	    fViz.schudleDraw();
 	}
     }
 
@@ -1328,12 +1342,16 @@ var Viz = new function ( ) {
 
 	gl.clearColor(0.0, 0.0, 0.0, 0.0);  // Clear to black, fully opaque
         gl.clearDepth(1.0);                 // Clear everything
-        gl.enable(gl.DEPTH_TEST);           // Enable depth testing
+        //gl.enable(gl.DEPTH_TEST);           // Enable depth testing
+	gl.disable(gl.DEPTH_TEST);           // Enable depth testing
         gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
 
 	// BUG: do I really want this?
 	gl.enable(gl.BLEND);
+	//gl.disable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+
+
 
 	var self = init( root, fetcher, canvas, gl, width, height );
 
@@ -1342,9 +1360,11 @@ var Viz = new function ( ) {
 
     function init ( fRoot, fFetcher, fCanvas, fGl, fWidth, fHeight ) {
 	var self = { };
-	self.addView = addView;
-	self.addData = addData;
-	self.setSelection =  setSelection;
+
+	self.addView      = addView;
+	self.addData      = addData;
+	self.setSelection = setSelection;
+	self.schudleDraw  = schudleDraw;
 
 	var fSourceKeys    = [];
 	var fDataSources   = {};
@@ -1370,7 +1390,7 @@ var Viz = new function ( ) {
 		return;
 	    }
 
-	    var plot = Type( plotRoot, fGl, fSelections, options );
+	    var plot = Type( self, plotRoot, fGl, fSelections, options );
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
@@ -1451,7 +1471,7 @@ var Viz = new function ( ) {
 
 
 
-function doGlDraw ( gl, glVars,
+function doGlDraw ( gl, glVars, fieldsCount,
 		    xMin, xMax, yMin, yMax,
 		    top, left, width, height, data, color ) {
 
@@ -1509,6 +1529,9 @@ function doGlDraw ( gl, glVars,
     var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
     gl.uniform1f(yMinLoc, yMinClip);
 
+    var pointSizeLoc = gl.getUniformLocation(glVars.shader, "uPointSize");
+    gl.uniform1f(pointSizeLoc, 2 );
+
     var colorLoc = gl.getUniformLocation(glVars.shader, "color");
     gl.uniform3fv(colorLoc, color );
 
@@ -1525,9 +1548,6 @@ function doGlDraw ( gl, glVars,
 
     return;
 }
-
-
-
 
 function initShaders( root, gl ) {
     var fragmentShader = getShader(root, gl, "fragment-shader");
