@@ -43,6 +43,7 @@
       precision highp float;
       attribute vec2 aVertexPositionX;
       attribute vec2 aVertexPositionY;
+      attribute vec2 aSelection;
 
       uniform mat4  uMVMatrix;
       uniform mat4  uPMatrix;
@@ -50,6 +51,9 @@
       uniform float xMin;
       uniform float yMax;
       uniform float yMin;
+      uniform float selectionMax;
+      uniform float selectionMin;
+
       uniform float uPointSize;
       
       varying float ignorPoint;
@@ -89,6 +93,8 @@
            || (gl_Position.y < yMin)
            || (gl_Position.x > xMax)
            || (gl_Position.x < xMin)
+           || (aSelection.x < selectionMin)
+           || (aSelection.x > selectionMax)
 	   ) {
 	   ignorPoint = 1.0;
 	} else {

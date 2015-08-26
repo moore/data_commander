@@ -692,20 +692,17 @@ var ScatterPlot = new function ( ) {
 		var sourceConfig = fSources[i];
 		var bufferInfo   = sourceConfig.bufferInfo;
 		var source       = sourceConfig.sourceObject;
-		var indexMin     = source.getStart();
-		var indexMax     = source.getEnd();
-		var valueMin     = source.getMin();
-		var valueMax     = source.getMax();
 		var color        = source.getColor();
 		var sourceKey    = source.getId();
 		var data         = fSourceBuffers[ sourceKey ];
 		var fieldsCount  = sourceConfig.projection.length;
 
-		indexMin = fSelectons.getMin( 'lon' );
-		indexMax = fSelectons.getMax( 'lon' );
-		valueMin = fSelectons.getMin( 'lat' );
-		valueMax = fSelectons.getMax( 'lat' );
-
+		var indexMin = fSelectons.getMin( 'lon' );
+		var indexMax = fSelectons.getMax( 'lon' );
+		var valueMin = fSelectons.getMin( 'lat' );
+		var valueMax = fSelectons.getMax( 'lat' );
+		var timeMin  = fSelectons.getMin( 'time' );
+		var timeMax  = fSelectons.getMax( 'time' );
 
 		if ( valueMin === undefined )
 		    valueMin = fMinY;
@@ -716,7 +713,8 @@ var ScatterPlot = new function ( ) {
 		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 		
 		doGlDraw( fGl, fGlVars, fieldsCount,
-			  indexMin, indexMax, valueMin, valueMax, 
+			  indexMin, indexMax, valueMin, valueMax,
+			  timeMin, timeMax,
 			  top, left, width, height, data, color );
 	    }
 
@@ -825,6 +823,7 @@ var BarChart = new function ( ) {
 	var fMaxX        = undefined;
 	var fGroup       = undefined;
 	var fZoom        = d3.behavior.zoom();
+	var fBatcher     = new BatchAction ( );
 
 	var fChart       = undefined;
 	var fXAxis       = undefined;
@@ -844,6 +843,11 @@ var BarChart = new function ( ) {
 	return self;
 
 	function selectionChanged ( keys ) {
+	    fBatcher.batch( selectionChangedWorker );
+	}
+	
+
+	function selectionChangedWorker () {
 	    fMinY = undefined;
 	    fMaxY = undefined;
 
@@ -853,7 +857,6 @@ var BarChart = new function ( ) {
 	    fY.domain([0, fMaxY]);
 	    fViz.schudleDraw();
 	}
-	
 
 	function resize ( ) {
 
@@ -924,7 +927,7 @@ var BarChart = new function ( ) {
 
 	    fZoom
 		.x(fX)
-		.on("zoom", fViz.schudleDraw)
+		.on("zoom", doZoom)
 	    ;
 
 	    d3.select(fRoot).call(fZoom);
@@ -932,6 +935,15 @@ var BarChart = new function ( ) {
 	    resize();
 	}
 
+
+	function doZoom ( ) {
+
+	    var timeDomain = fX.domain( );
+	    fSelectons.setSelection( 'time',
+				     timeDomain[0].getTime(), 
+				     timeDomain[1].getTime() );
+
+	}
 
 	function addData ( sourceObject, projection, options ) {
 
@@ -1185,10 +1197,7 @@ var BarChart = new function ( ) {
 		freeBuffer( tilePointer );
 	    }
 
-	    recomputeData( sourceConfig );
-	    fY.domain([0, fMaxY]);
-
-	    fViz.schudleDraw();
+	    fBatcher.batch( selectionChangedWorker );
 	}
     }
 
@@ -1473,6 +1482,7 @@ var Viz = new function ( ) {
 
 function doGlDraw ( gl, glVars, fieldsCount,
 		    xMin, xMax, yMin, yMax,
+		    timeMin, timeMax,
 		    top, left, width, height, data, color ) {
 
     var glWidth  = gl.canvas.clientWidth;
@@ -1529,6 +1539,12 @@ function doGlDraw ( gl, glVars, fieldsCount,
     var yMinClip =  (glHeight/2 - (top + height) )/(glHeight/2);
     gl.uniform1f(yMinLoc, yMinClip);
 
+    var selectionMinLoc = gl.getUniformLocation(glVars.shader, "selectionMin");
+    gl.uniform1f(selectionMinLoc, timeMin/1000);
+
+    var selectionMaxLoc = gl.getUniformLocation(glVars.shader, "selectionMax");
+    gl.uniform1f(selectionMaxLoc, timeMax/1000);
+
     var pointSizeLoc = gl.getUniformLocation(glVars.shader, "uPointSize");
     gl.uniform1f(pointSizeLoc, 2 );
 
@@ -1539,9 +1555,10 @@ function doGlDraw ( gl, glVars, fieldsCount,
     for ( var i = 0 ; i < data.length ; i++ ) {
 	var info = data[i];
 
-	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 0, info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 4 * fieldsCount, info.dataOffset * 4);
 	// BUG: even thou we will not use .y it could walk of the end of the buffer :(
-	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 0, 4 + info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 4 * fieldsCount, 4 + info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.selection, 2, gl.FLOAT, false, 4 * fieldsCount, 8 + info.dataOffset * 4);
 
 	gl.drawArrays(gl.POINTS, 0, info.pointsCount);
     }
@@ -1574,9 +1591,14 @@ function initShaders( root, gl ) {
     var vertexPositionAttributeY = gl.getAttribLocation(shaderProgram, "aVertexPositionY");
     gl.enableVertexAttribArray(vertexPositionAttributeY);
     
-    return { pointsX : vertexPositionAttributeX, 
-	     pointsY : vertexPositionAttributeY, 
-	     shader  : shaderProgram }
+    var selection = gl.getAttribLocation(shaderProgram, "aSelection");
+    gl.enableVertexAttribArray(selection);
+
+
+    return { pointsX   : vertexPositionAttributeX, 
+	     pointsY   : vertexPositionAttributeY,
+	     selection : selection,
+	     shader    : shaderProgram }
 
 }
 
