@@ -864,8 +864,11 @@ var BarChart = new function ( ) {
 
 	    width  = elementBox.width - fMargin.left - fMargin.right;
 	    height = elementBox.height - fMargin.top - fMargin.bottom;
-
-	    var bandWidth = width/((fMaxX -fMinX)/1000/DAY);
+	    
+	    var xDomain     = fX.domain();
+	    var domainDelta = xDomain[1].getTime() - xDomain[0].getTime();
+	    var days        = domainDelta/1000/DAY;
+	    var bandWidth   = width/days;
 
 	    fGroup.rangeRoundBands([0, bandWidth], .1);
 
