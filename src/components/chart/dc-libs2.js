@@ -284,30 +284,31 @@ function snapBound ( time, bucketSize ) {
     return Math.floor( time / bucketSize ) * bucketSize;
 }
 
-function identityFunction ( tilePointer, iterator, sourceData, buffer, offset ) {
+function identityFunction ( tilePointer, iterator, sourceData, indexes, buffer, offset ) {
 
-    var projection = sourceData.projection;
-    var minIndex   = sourceData.xStart;
+    var minIndex = sourceData.xStart;
 
     sourceData.dataOffset  = offset;
     sourceData.pointsCount = readEntriesCount( iterator );
 
-    sourceData.minX = readColumnMin( iterator, projection[0] );
-    sourceData.maxX = readColumnMax( iterator, projection[0] );
-    sourceData.minY = readColumnMin( iterator, projection[1] );
-    sourceData.maxY = readColumnMax( iterator, projection[1] );
+    // BUG: we should generlize this
+    sourceData.minX = readColumnMin( iterator, indexes[0] );
+    sourceData.maxX = readColumnMax( iterator, indexes[0] );
+    sourceData.minY = readColumnMin( iterator, indexes[1] );
+    sourceData.maxY = readColumnMax( iterator, indexes[1] );
 
-    var columns = projection.length;
+    var columns = indexes.length;
 
     for ( var j = offset ; 
 	  buffer.length > (j + columns - 1) 
 	  && nextValue( tilePointer, iterator ) !== 0 ; 
 	  j += columns ) {
-	for ( var i = 0 ; i < projection.length ; i++ ) {
+	for ( var i = 0 ; i < indexes.length ; i++ ) {
 	    if ( i === 0 )
-		buffer[j] = readValue( iterator, projection[0] ) - minIndex;
+		// BUG: we should remove this special case
+		buffer[j] = readValue( iterator, indexes[0] ) - minIndex;
 	    else
-		buffer[j+i] = readValue( iterator, projection[i] );
+		buffer[j+i] = readValue( iterator, indexes[i] );
 	}
     }
 
@@ -336,9 +337,23 @@ function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
     var buffer = bufferInfo.data;
     var offset = bufferInfo.offset;
 
+    var names = getNames( iterator );
+
+    var projection = sourceData.projection;
+    var indexes = [];
+
+    for ( var i = 0 ; i < projection.length ; i++ ) {
+	var index = names[projection[i]];
+
+	// BUG: there must be a better thing to do hear
+	if ( index === undefined )
+	    index = 0;
+
+	indexes.push( index );
+    }
 
     while ( hasMore( iterator ) ) {
-	offset = loadFunction( tilePointer, iterator, sourceData, buffer, offset);
+	offset = loadFunction( tilePointer, iterator, sourceData, indexes, buffer, offset);
 	if ( hasMore( iterator ) ) {
 	    var newBuffer = new Float32Array( buffer.length * 2 );
 	    newBuffer.set( buffer );
@@ -626,15 +641,10 @@ var ScatterPlot = new function ( ) {
 
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var sourceConfig = fSources[i];
+		var projection   = sourceConfig.projection;
 
-		var names = sourceConfig.columnNames;
-
-		if ( names[0] === undefined )
-		    continue;
-
-
-		updateKey( names[0], results, xDomain[0], xDomain[1] );
-		updateKey( names[1], results, yDomain[0], yDomain[1] );
+		updateKey( projection[0], results, xDomain[0], xDomain[1] );
+		updateKey( projection[1], results, yDomain[0], yDomain[1] );
 	    }
 
 
@@ -664,7 +674,6 @@ var ScatterPlot = new function ( ) {
 	    sourceConfig.loadFunction = identityFunction;
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = projection;
-	    sourceConfig.columnNames  = [undefined, undefined];
 
 	    fSources.push( sourceConfig );
 	    fSourceBuffers[ sourceObject.getId() ] = [];
@@ -731,20 +740,10 @@ var ScatterPlot = new function ( ) {
 	    var end          = source.getEnd();
 	    var sourceKey    = source.getId();
 
-	    var names = sourceConfig.columnNames;
-
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
 		var tilePointer  = loadBuffer( tileArray );
 		var dataInfo     = initSorceData( start, end, projection );
-
-		if ( names[0] === undefined ) {
-		    var iterator = initIterator( tilePointer );
-		    names[0] = readName( iterator, projection[0] );
-		    names[1] = readName( iterator, projection[1] );
-		    finishIterator( iterator );
-		}
-
 
 		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
 
@@ -848,8 +847,8 @@ var BarChart = new function ( ) {
 	
 
 	function selectionChangedWorker () {
-	    fMinY = undefined;
-	    fMaxY = undefined;
+	    //fMinY = undefined;
+	    //fMaxY = undefined;
 
 	    for ( var i = 0 ; i < fSources.length ; i++ )
 		recomputeData( fSources[i] );
@@ -962,7 +961,6 @@ var BarChart = new function ( ) {
 	    sourceConfig.loadFunction = identityFunction;
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = projection;
-	    sourceConfig.columnNames  = [undefined, undefined];
 	    sourceConfig.name         = "bob";
 
 	    fSources.push( sourceConfig );
@@ -1180,20 +1178,10 @@ var BarChart = new function ( ) {
 	    var end          = source.getEnd()/1000;
 	    var sourceKey    = source.getId();
 
-	    var names = sourceConfig.columnNames;
-
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
 		var tilePointer  = loadBuffer( tileArray );
 		var dataInfo     = initSorceData( start, end, projection );
-
-		if ( names[0] === undefined ) {
-		    var iterator = initIterator( tilePointer );
-		    names[0] = readName( iterator, projection[0] );
-		    names[1] = readName( iterator, projection[1] );
-		    finishIterator( iterator );
-		}
-
 
 		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
 

@@ -62,7 +62,7 @@ new function() {
 					     yRange : [-90 , 90 ],
 					     color  : colors[ i % colors.length ],
 					 } );
-	    plot1Data.push( [sourceKey, [2, 1, 0], {}] );
+	    plot1Data.push( [sourceKey, ['lon', 'lat', 'time'], {}] );
 
 	    var sourceKey2 = viz.addData( sources[i],  typeName,
 					  startTime, endTime, 
@@ -70,7 +70,7 @@ new function() {
 					      color : colors[ i % colors.length ],
 					  } );
 	    
-	    plot2Data.push( [sourceKey2, [0, 1, 2], { } ]);
+	    plot2Data.push( [sourceKey2, ['time', 'lat', 'lon'], { } ]);
 	}
 
 

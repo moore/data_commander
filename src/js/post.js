@@ -8,6 +8,10 @@ function loadBuffer ( arrayBuffer ) {
     return ptr;
 }
 
+function freeBuffer ( buf ) {
+    Module._free(buf);
+}
+
 var readIndexStart   = Module.cwrap('readIndexStart'  , 'number', ['number']);
 var initIterator     = Module.cwrap('initIterator'    , null    , ['number']);
 var nextValue        = Module.cwrap('nextValue'       , 'number', ['number', 'number']);
@@ -50,6 +54,3 @@ function readUnits ( iterator, index ) {
 }
 
 
-function freeBuffer ( buf ) {
-    Module._free(buf);
-}
