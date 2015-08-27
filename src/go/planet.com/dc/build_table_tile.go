@@ -24,6 +24,7 @@ type Scene struct {
 	Timestamp uint64
 	Lat       float64
 	Lon       float64
+	Good      uint8
 }
 
 type ByTimestamp []Scene
@@ -63,12 +64,14 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 		satellite, _ := strconv.ParseUint(each[1], 16, 16)
 		lat      , _ := strconv.ParseFloat(each[2], 32)
 		lon      , _ := strconv.ParseFloat(each[3], 32)
+		good     , _ := strconv.ParseUint(each[0], 10, 8)
 
 		index := i-1;
 		scenes[index].Timestamp = timestamp * 1000
 		scenes[index].Satellite = uint16(satellite)
 		scenes[index].Lat       = (float64)(lat)
 		scenes[index].Lon       = (float64)(lon)
+		scenes[index].Good      = uint8(good)
 
          }
 
@@ -89,14 +92,18 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 	var BucketSize uint64 = 24 * 60 * 60 * 1000
 
 	times  := make([]int64, len(scenes))
+	sats   := make([]int64, len(scenes))
 	lats   := make([]int64, len(scenes))
 	lons   := make([]int64, len(scenes))
+	good   := make([]int64, len(scenes))
 
 	var currnetTileTime uint64  = 0
 	var cussrntStart    int     = 0
 	var lastTime        int64   = 0
+	var lastSat         uint16  = 0
 	var lastLat         float64 = 0
 	var lastLon         float64 = 0
+	var lastGood        uint8   = 0
 
 	for i, record := range scenes {
 		tileTime := (record.Timestamp / BucketSize) * BucketSize 
@@ -104,7 +111,7 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 		if currnetTileTime == 0 {
 			currnetTileTime = tileTime
 		} else if currnetTileTime != tileTime {
-			tile, _ := makeTile( times[cussrntStart:i], lats[cussrntStart:i], lons[cussrntStart:i] )
+			tile, _ := makeTile( times[cussrntStart:i], sats[cussrntStart:i], lats[cussrntStart:i], lons[cussrntStart:i], good[cussrntStart:i] )
 			cussrntStart = i
 
 			path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
@@ -113,19 +120,25 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 			lastTime  = 0
 			lastLat   = 0
 			lastLon   = 0
+			lastSat   = 0
+			lastGood  = 0
 			currnetTileTime = tileTime
 		}
 
 		times[i] = int64(record.Timestamp) - lastTime 
+		sats[i]  = int64(record.Satellite - lastSat)
 		lats[i]  = (int64)((record.Lat - lastLat) * math.Pow(10, 6))
 		lons[i]  = (int64)((record.Lon - lastLon) * math.Pow(10, 6))
+		good[i]  = int64(record.Good - lastGood)
 
 		lastTime = int64(record.Timestamp)
+		lastSat  = record.Satellite
 		lastLat  = record.Lat
 		lastLon  = record.Lon
+		lastGood = record.Good
 	}
 
-	tile, _ := makeTile( times[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:] )
+	tile, _ := makeTile( times[cussrntStart:], sats[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:], good[cussrntStart:] )
 	path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
 
 	writeTile( tile, path )
@@ -180,7 +193,7 @@ func freeColumn ( builder C.struct_Column_builder) () {
 	C.free(unsafe.Pointer(builder.units.data))
 }
 
-func makeTile ( times []int64, lats []int64, lons []int64 ) ([]byte, error) {
+func makeTile ( times []int64, sats []int64, lats []int64, lons []int64, good []int64 ) ([]byte, error) {
 
 	tableType   := "tychoon"
 	tableType_c := C.CString(tableType)
@@ -191,13 +204,22 @@ func makeTile ( times []int64, lats []int64, lons []int64 ) ([]byte, error) {
 	timeColumn := buildColumn( "time", "s", times, -3 )
 	defer freeColumn( timeColumn )
 
+	hwidColumn := buildColumn( "hwid", "id", sats, 0 )
+	defer freeColumn( hwidColumn )
+
 	latColumn := buildColumn( "lat", "deg", lats, -6 )
 	defer freeColumn( latColumn )
 
 	lonColumn := buildColumn( "lon", "deg", lons, -6 )
 	defer freeColumn( lonColumn )
 
-	secondaryColumns := []*C.struct_Column_builder{ &latColumn, &lonColumn }
+	goodColumn := buildColumn( "good", "good", good, 0 )
+	defer freeColumn( goodColumn )
+
+	secondaryColumns := 
+		[]*C.struct_Column_builder{ 
+		&hwidColumn, &latColumn, 
+		&lonColumn, &goodColumn }
 
 	var builder C.struct_TableTile_builder
 
