@@ -64,7 +64,7 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 		satellite, _ := strconv.ParseUint(each[1], 16, 16)
 		lat      , _ := strconv.ParseFloat(each[2], 32)
 		lon      , _ := strconv.ParseFloat(each[3], 32)
-		good     , _ := strconv.ParseUint(each[0], 10, 8)
+		good     , _ := strconv.ParseUint(each[4], 10, 8)
 
 		index := i-1;
 		scenes[index].Timestamp = timestamp * 1000
@@ -100,10 +100,10 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 	var currnetTileTime uint64  = 0
 	var cussrntStart    int     = 0
 	var lastTime        int64   = 0
-	var lastSat         uint16  = 0
+	var lastSat         int64   = 0
 	var lastLat         float64 = 0
 	var lastLon         float64 = 0
-	var lastGood        uint8   = 0
+	var lastGood        int64   = 0
 
 	for i, record := range scenes {
 		tileTime := (record.Timestamp / BucketSize) * BucketSize 
@@ -126,16 +126,16 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 		}
 
 		times[i] = int64(record.Timestamp) - lastTime 
-		sats[i]  = int64(record.Satellite - lastSat)
+		sats[i]  = int64(record.Satellite) - lastSat
 		lats[i]  = (int64)((record.Lat - lastLat) * math.Pow(10, 6))
 		lons[i]  = (int64)((record.Lon - lastLon) * math.Pow(10, 6))
-		good[i]  = int64(record.Good - lastGood)
+		good[i]  = int64(record.Good) - lastGood
 
 		lastTime = int64(record.Timestamp)
-		lastSat  = record.Satellite
+		lastSat  = int64(record.Satellite)
 		lastLat  = record.Lat
 		lastLon  = record.Lon
-		lastGood = record.Good
+		lastGood = int64(record.Good)
 	}
 
 	tile, _ := makeTile( times[cussrntStart:], sats[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:], good[cussrntStart:] )

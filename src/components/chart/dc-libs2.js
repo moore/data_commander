@@ -114,11 +114,12 @@ var RemoteData = new function ( ) {
     var sNextSourceId = 1;
     return factory;
 
-    function factory ( fFetcher, fSource, fType, fStart, fEnd, xRange, yRange, color ) {
+    function factory ( fFetcher, fSource, fType, fStart, fEnd, projection, xRange, yRange, color ) {
 
 	var fColor      = new Float32Array( color );
 	var fRanges     = [];
 	var fSelectons  = [];
+	var fProjection = projection.slice(0);
 
 	for ( var i = 0 ; i < 2 ; i++ ) {
 	    fRanges.push({min: undefined, max: undefined} );
@@ -149,6 +150,7 @@ var RemoteData = new function ( ) {
 	return init( fFetcher, 
 		     fSourceId, fSource, fType, 
 		     fStart, fEnd,
+		     fProjection,
 		     fRanges, fSelectons, 
 		     fColor );
     }
@@ -156,19 +158,19 @@ var RemoteData = new function ( ) {
     function init ( fFetcher, 
 		    fSourceId, fSource, fType, 
 		    fStart, fEnd,
+		    fProjection,
 		    fRanges, fSelectons, 
 		    fColor ) {
 	var fBatcher         = new BatchAction ( );
 	var self             = {};
 	var fRequestedTimes  = {};
-	var fDataTiles       = {};
 	var fListeners       = [];
 	var fNewData         = [];
 	var fEventsTriggeres = [];
 
 	self.getId           = getId;
+	self.getProjection   = getProjection;
 	self.addListener     = addListener;
-	self.getTile         = getTile;
 	self.getRange        = getRange;
 	self.getStart        = getStart;
 	self.getEnd          = getEnd;
@@ -184,12 +186,12 @@ var RemoteData = new function ( ) {
 	    return fSourceId;
 	}
 
-	function addListener ( callback, options ) {
-	    fListeners.push( [ callback, options ] );
+	function getProjection ( ) {
+	    return fProjection.slice(0);
 	}
 
-	function getTile ( tileTime ) {
-	    return fDataTiles[ tileTime ];
+	function addListener ( callback, options ) {
+	    fListeners.push( [ callback, options ] );
 	}
 
 	function getRange ( start, end ) {
@@ -232,7 +234,6 @@ var RemoteData = new function ( ) {
 
 	function gotData ( dataArray, tileStart ) {
 	    fNewData.push( dataArray );
-	    fDataTiles[ tileStart ] = dataArray;
 	    triggerEvents( );
 	}
 
@@ -284,18 +285,18 @@ function snapBound ( time, bucketSize ) {
     return Math.floor( time / bucketSize ) * bucketSize;
 }
 
-function identityFunction ( tilePointer, iterator, sourceData, indexes, buffer, offset ) {
+function identityFunction ( tilePointer, iterator, dataInfo, indexes, buffer, offset ) {
 
-    var minIndex = sourceData.xStart;
+    var minIndex = dataInfo.xStart;
 
-    sourceData.dataOffset  = offset;
-    sourceData.pointsCount = readEntriesCount( iterator );
+    dataInfo.dataOffset  = offset;
+    dataInfo.pointsCount = readEntriesCount( iterator );
 
     // BUG: we should generlize this
-    sourceData.minX = readColumnMin( iterator, indexes[0] );
-    sourceData.maxX = readColumnMax( iterator, indexes[0] );
-    sourceData.minY = readColumnMin( iterator, indexes[1] );
-    sourceData.maxY = readColumnMax( iterator, indexes[1] );
+    dataInfo.minX = readColumnMin( iterator, indexes[0] );
+    dataInfo.maxX = readColumnMax( iterator, indexes[0] );
+    dataInfo.minY = readColumnMin( iterator, indexes[1] );
+    dataInfo.maxY = readColumnMax( iterator, indexes[1] );
 
     var columns = indexes.length;
 
@@ -304,6 +305,7 @@ function identityFunction ( tilePointer, iterator, sourceData, indexes, buffer, 
 	  && nextValue( tilePointer, iterator ) !== 0 ; 
 	  j += columns ) {
 	for ( var i = 0 ; i < indexes.length ; i++ ) {
+
 	    if ( i === 0 )
 		// BUG: we should remove this special case
 		buffer[j] = readValue( iterator, indexes[0] ) - minIndex;
@@ -316,11 +318,12 @@ function identityFunction ( tilePointer, iterator, sourceData, indexes, buffer, 
     return j;
 }
 
-function initSorceData ( xStart, xEnd, projection ) {
+function initSorceData ( xStart, xEnd, projection, names ) {
     return {
 	xStart        : xStart,
 	xEnd          : xEnd,
 	projection    : projection,
+	names         : names,
 	minX          : undefined,
 	maxX          : undefined,
 	minY          : undefined,
@@ -330,7 +333,7 @@ function initSorceData ( xStart, xEnd, projection ) {
     };
 }
 
-function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
+function loadGlBuffer ( loadFunction, tilePointer, bufferInfo, start, end, projection ) {
     
     var iterator = initIterator( tilePointer );
 
@@ -339,7 +342,6 @@ function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
 
     var names = getNames( iterator );
 
-    var projection = sourceData.projection;
     var indexes = [];
 
     for ( var i = 0 ; i < projection.length ; i++ ) {
@@ -351,9 +353,12 @@ function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
 
 	indexes.push( index );
     }
+    
+    var dataInfo = initSorceData( start, end, projection, names );
+
 
     while ( hasMore( iterator ) ) {
-	offset = loadFunction( tilePointer, iterator, sourceData, indexes, buffer, offset);
+	offset = loadFunction( tilePointer, iterator, dataInfo, indexes, buffer, offset);
 	if ( hasMore( iterator ) ) {
 	    var newBuffer = new Float32Array( buffer.length * 2 );
 	    newBuffer.set( buffer );
@@ -365,6 +370,8 @@ function loadGlBuffer ( loadFunction, tilePointer, sourceData, bufferInfo ) {
 
     bufferInfo.offset = offset;
     bufferInfo.data   = buffer;
+
+    return dataInfo;
 }
 
 
@@ -660,7 +667,7 @@ var ScatterPlot = new function ( ) {
 
 	}
 
-	function addData ( sourceObject, projection, options ) {
+	function addData ( sourceObject ) {
 
 	    var bufferInfo  = { 
 		offset    : 0, 
@@ -673,18 +680,10 @@ var ScatterPlot = new function ( ) {
 	    sourceConfig.bufferInfo   = bufferInfo;
 	    sourceConfig.loadFunction = identityFunction;
 	    sourceConfig.sourceObject = sourceObject;
-	    sourceConfig.projection   = projection;
+	    sourceConfig.projection   = sourceObject.getProjection();
 
 	    fSources.push( sourceConfig );
 	    fSourceBuffers[ sourceObject.getId() ] = [];
-
-	    if ( options !== undefined ) {
-
-		if ( options.loadFunction != undefined ) {
-		    sourceConfig.loadFunction = options.loadFunction;
-		}
-	    }
-
 
 	    sourceObject.addListener( handleNewData, sourceConfig );
 	}
@@ -743,9 +742,10 @@ var ScatterPlot = new function ( ) {
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
 		var tilePointer  = loadBuffer( tileArray );
-		var dataInfo     = initSorceData( start, end, projection );
 
-		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
+		var dataInfo =
+		    loadGlBuffer( loadFunction, tilePointer, 
+				  bufferInfo, start, end, projection );
 
 		fSourceBuffers[ sourceKey ].push( dataInfo );
 
@@ -754,6 +754,8 @@ var ScatterPlot = new function ( ) {
 
 		if ( fMaxY === undefined || fMaxY < dataInfo.maxY )
 		    fMaxY = dataInfo.maxY;
+
+		freeBuffer( tilePointer );
 	    }
 
 	    var elementBox = fRoot.getBoundingClientRect();
@@ -803,26 +805,28 @@ var BarChart = new function ( ) {
     return factory;
 
     function factory ( fViz, fRoot, fGl, fSelectons, options ) {
-	var fX = d3.time.scale.utc();
-	var fY = d3.scale.linear();
+	var fX      = d3.time.scale.utc();
+	var fY      = d3.scale.linear();
+	var fColumn = options.column;
 
 	var self = BasePlot( fRoot, options, fX, fY );
 
-	return init( self, fViz, fRoot, fGl, fSelectons, fX, fY );
+	return init( self, fViz, fRoot, fGl, fSelectons, fColumn, fX, fY );
     }
 
-    function init ( self, fViz, fRoot, fGl, fSelectons, fX, fY ) {
+    function init ( self, fViz, fRoot, fGl, fSelectons, fColumn, fX, fY ) {
 
-	var fSources     = [];
-	var fListeners   = [];
-	var fD3Data      = {};
-	var fMinY        = undefined;
-	var fMaxY        = undefined;
-	var fMinX        = undefined;
-	var fMaxX        = undefined;
-	var fGroup       = undefined;
-	var fZoom        = d3.behavior.zoom();
-	var fBatcher     = new BatchAction ( );
+	var fSources       = [];
+	var fListeners     = [];
+	var fD3Data        = {};
+	var fSourceBuffers = {};
+	var fMinY          = undefined;
+	var fMaxY          = undefined;
+	var fMinX          = undefined;
+	var fMaxX          = undefined;
+	var fGroup         = undefined;
+	var fZoom          = d3.behavior.zoom();
+	var fBatcher       = new BatchAction ( );
 
 	var fChart       = undefined;
 	var fXAxis       = undefined;
@@ -847,15 +851,26 @@ var BarChart = new function ( ) {
 	
 
 	function selectionChangedWorker () {
-	    //fMinY = undefined;
-	    //fMaxY = undefined;
+	    fMinY = undefined;
+	    fMaxY = undefined;
 
-	    for ( var i = 0 ; i < fSources.length ; i++ )
+	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+		var source = fSources[i];
+		
 		recomputeData( fSources[i] );
+
+	    }
+
+	    fMinX = fSelectons.getMin( 'time' );
+	    fMaxX = fSelectons.getMax( 'time' );
+
+	    fX.domain( [fMinX, fMaxX] );
+	    fZoom.x(fX);
 
 	    fY.domain([0, fMaxY]);
 	    fViz.schudleDraw();
 	}
+
 
 	function resize ( ) {
 
@@ -947,7 +962,7 @@ var BarChart = new function ( ) {
 
 	}
 
-	function addData ( sourceObject, projection, options ) {
+	function addData ( sourceObject ) {
 
 	    var bufferInfo  = { 
 		offset    : 0, 
@@ -960,36 +975,16 @@ var BarChart = new function ( ) {
 	    sourceConfig.bufferInfo   = bufferInfo;
 	    sourceConfig.loadFunction = identityFunction;
 	    sourceConfig.sourceObject = sourceObject;
-	    sourceConfig.projection   = projection;
+	    sourceConfig.projection   = sourceObject.getProjection();
 	    sourceConfig.name         = "bob";
 
 	    fSources.push( sourceConfig );
 
-	    if ( options !== undefined ) {
-
-		if ( options.loadFunction != undefined ) {
-		    sourceConfig.loadFunction = options.loadFunction;
-		}
-	    }
-
-	    updateXDomain( sourceObject );
-
 	    sourceObject.addListener( handleNewData, sourceConfig );
+
+	    fSourceBuffers[ sourceObject.getId() ] = [];
 	}
 
-	function updateXDomain( sourceObject ) {
-	    var start = sourceObject.getStart();
-	    var end   = sourceObject.getEnd();
-	    
-	    if ( fMinX === undefined || fMinX > start )
-		fMinX = start;
-
-	    if ( fMaxX === undefined || fMaxX < end )
-		fMaxX = end;
-
-	    fX.domain( [fMinX, fMaxX] );
-	    fZoom.x(fX);
-	}
 
 	function formatColor ( parts ) {
 	    return "rgb(" 
@@ -1084,7 +1079,7 @@ var BarChart = new function ( ) {
 	}
 
 	
-	function recomputeData ( sourceConfig ) {
+	function recomputeData ( sourceConfig, dataInfo ) {
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
@@ -1117,10 +1112,10 @@ var BarChart = new function ( ) {
 		  fDataBuffer[i] = 0;
 
 	    for ( var i = 0 ; i < stop ; i++ ) {
-		var index = i*3;
+		var index = i*projection.length;
 
+		var lon = data[index];
 		var lat = data[index+1];
-		var lon = data[index+2];
 
 		if ( !(
 		           lon < maxLon 
@@ -1135,7 +1130,7 @@ var BarChart = new function ( ) {
 		if ( minLat > lat || maxLat < lat ) 
 		    continue;
 
-		var day = snapBound( data[index] + start, DAY ) * 1000;
+		var day = snapBound( data[index+2] + start, DAY ) * 1000;
 
 		
 		if ( day < firstDay )
@@ -1181,9 +1176,12 @@ var BarChart = new function ( ) {
 	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
 		var tileArray    = tileArrays[ i ];
 		var tilePointer  = loadBuffer( tileArray );
-		var dataInfo     = initSorceData( start, end, projection );
 
-		loadGlBuffer( loadFunction, tilePointer, dataInfo, bufferInfo );
+		var dataInfo =
+		    loadGlBuffer( loadFunction, tilePointer, 
+				  bufferInfo, start, end, projection );
+
+		fSourceBuffers[ sourceKey ].push( dataInfo );
 
 		freeBuffer( tilePointer );
 	    }
@@ -1394,18 +1392,15 @@ var Viz = new function ( ) {
 	    fViews.push( plot );
 
 	    for ( var i = 0 ; i < sources.length ; i++ ) {
-		var sourceKey     = sources[i][0];
-		var projection    = sources[i][1];
-		var sourceOptions = sources[i][2];
-
+		var sourceKey    = sources[i];
 		var sourceObject = fDataSources[ sourceKey ];
 
-		plot.addData( sourceObject, projection, sourceOptions );
+		plot.addData( sourceObject );
 	    }
 
 	}
 
-	function addData ( sourceName, typeName, start, end, options ) {
+	function addData ( sourceName, typeName, start, end, projection, options ) {
 	    var xRange;
 	    var yRange;
 	    var color = [0.0, 1.0, 0.0];
@@ -1420,7 +1415,7 @@ var Viz = new function ( ) {
 	    }
 
 	    
-	    var source = new RemoteData ( fFetcher, sourceName, typeName, start, end, xRange, yRange, color );
+	    var source = new RemoteData ( fFetcher, sourceName, typeName, start, end, projection, xRange, yRange, color );
 
 	    var sourceKey = source.getId();
 	    fDataSources[ sourceKey ] = source;
@@ -1539,6 +1534,9 @@ function doGlDraw ( gl, glVars, fieldsCount,
     var pointSizeLoc = gl.getUniformLocation(glVars.shader, "uPointSize");
     gl.uniform1f(pointSizeLoc, 2 );
 
+    var hwidLoc = gl.getUniformLocation(glVars.shader, "uHwid");
+    gl.uniform1f(hwidLoc, 0 );
+
     var colorLoc = gl.getUniformLocation(glVars.shader, "color");
     gl.uniform3fv(colorLoc, color );
 
@@ -1550,6 +1548,8 @@ function doGlDraw ( gl, glVars, fieldsCount,
 	// BUG: even thou we will not use .y it could walk of the end of the buffer :(
 	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 4 * fieldsCount, 4 + info.dataOffset * 4);
 	gl.vertexAttribPointer(glVars.selection, 2, gl.FLOAT, false, 4 * fieldsCount, 8 + info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.hwid, 2, gl.FLOAT, false, 4 * fieldsCount, 12 + info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.good, 2, gl.FLOAT, false, 4 * fieldsCount, 16 + info.dataOffset * 4);
 
 	gl.drawArrays(gl.POINTS, 0, info.pointsCount);
     }
@@ -1585,10 +1585,18 @@ function initShaders( root, gl ) {
     var selection = gl.getAttribLocation(shaderProgram, "aSelection");
     gl.enableVertexAttribArray(selection);
 
+    var hwid = gl.getAttribLocation(shaderProgram, "aHwid");
+    gl.enableVertexAttribArray(hwid);
+
+    var good = gl.getAttribLocation(shaderProgram, "aGood");
+    gl.enableVertexAttribArray(good);
+
 
     return { pointsX   : vertexPositionAttributeX, 
 	     pointsY   : vertexPositionAttributeY,
 	     selection : selection,
+	     hwid      : hwid,
+	     good      : good,
 	     shader    : shaderProgram }
 
 }

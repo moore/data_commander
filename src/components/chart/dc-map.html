@@ -20,6 +20,8 @@
 	    <script id="fragment-shader" type="x-shader/x-fragment">
       precision highp float;
       varying float ignorPoint;
+      varying float vGood;
+
       uniform vec3 color;
 
       void main(void) {
@@ -36,7 +38,11 @@
         //if ( length( gl_PointCoord - vec2(0.5) ) > 0.5 )
         //   discard;
 
-        gl_FragColor = vec4(color, 0.5);
+        if ( vGood > 0.5 )
+          gl_FragColor = vec4(0.0, 255.0, 0.0, 0.5);
+
+        else
+           gl_FragColor = vec4(color, 0.5);
       }
 	    </script>
 	    <script id="vertex-shader" type="x-shader/x-vertex">
@@ -44,6 +50,8 @@
       attribute vec2 aVertexPositionX;
       attribute vec2 aVertexPositionY;
       attribute vec2 aSelection;
+      attribute vec2 aHwid;
+      attribute vec2 aGood;
 
       uniform mat4  uMVMatrix;
       uniform mat4  uPMatrix;
@@ -53,10 +61,12 @@
       uniform float yMin;
       uniform float selectionMax;
       uniform float selectionMin;
+      uniform float hwid;
 
       uniform float uPointSize;
       
       varying float ignorPoint;
+      varying float vGood;
 
       /*
       float M_PI = 3.14159265359;
@@ -86,7 +96,8 @@
 
         gl_Position = uPMatrix * uMVMatrix * vec4(point, 1.0, 1.0);
         gl_PointSize = uPointSize;
-        
+      
+        vGood = aGood.x;
       
         if (
               (gl_Position.y > yMax)
@@ -95,6 +106,7 @@
            || (gl_Position.x < xMin)
            || (aSelection.x < selectionMin)
            || (aSelection.x > selectionMax)
+           || ((hwid != 0.0) && aHwid.x == hwid )
 	   ) {
 	   ignorPoint = 1.0;
 	} else {

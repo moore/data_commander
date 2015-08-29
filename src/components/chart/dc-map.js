@@ -57,20 +57,15 @@ new function() {
 
 	    var sourceKey = viz.addData( sources[i],  typeName, 
 					 startTime, endTime, 
+					 ['lon', 'lat', 'time', 'hwid', 'good'],
 					 {
 					     xRange : [-180, 180],
 					     yRange : [-90 , 90 ],
 					     color  : colors[ i % colors.length ],
 					 } );
-	    plot1Data.push( [sourceKey, ['lon', 'lat', 'time'], {}] );
-
-	    var sourceKey2 = viz.addData( sources[i],  typeName,
-					  startTime, endTime, 
-					  { 
-					      color : colors[ i % colors.length ],
-					  } );
+	    plot1Data.push( sourceKey );
 	    
-	    plot2Data.push( [sourceKey2, ['time', 'lat', 'lon'], { } ]);
+	    plot2Data.push( sourceKey );
 	}
 
 
@@ -89,13 +84,16 @@ new function() {
 		     {
 			 lockZoomXY : true,
 			 group      : 1,
+			 x          : 'lon',
+			 y          : 'lat',
 		     } );
 
 	
 	viz.addView( BarChart, "#plot2",  
 		     plot2Data,
 		     {
-			 group : 2,
+			 group  : 2,
+			 column : 'time',
 		     } );
 
 	
