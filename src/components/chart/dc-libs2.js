@@ -808,13 +808,17 @@ var BarChart = new function ( ) {
 	var fX      = d3.time.scale.utc();
 	var fY      = d3.scale.linear();
 	var fColumn = options.column;
+	var fGroupBy = [];
+
+	if ( options.groupBy !== undefined )
+	    fGroupBy = options.groupBy.slice(0);
 
 	var self = BasePlot( fRoot, options, fX, fY );
 
-	return init( self, fViz, fRoot, fGl, fSelectons, fColumn, fX, fY );
+	return init( self, fViz, fRoot, fGl, fSelectons, fColumn, fGroupBy, fX, fY );
     }
 
-    function init ( self, fViz, fRoot, fGl, fSelectons, fColumn, fX, fY ) {
+    function init ( self, fViz, fRoot, fGl, fSelectons, fColumn, fGroupBy, fX, fY ) {
 
 	var fSources       = [];
 	var fListeners     = [];
@@ -822,11 +826,15 @@ var BarChart = new function ( ) {
 	var fSourceBuffers = {};
 	var fMinY          = undefined;
 	var fMaxY          = undefined;
-	var fMinX          = undefined;
-	var fMaxX          = undefined;
+	var fMinX          = fSelectons.getMin( 'time' );
+	var fMaxX          = fSelectons.getMax( 'time' );
+	var fMinSelection  = fSelectons.getMin( 'time' );
+	var fMaxSelection  = fSelectons.getMax( 'time' );
+
 	var fGroup         = undefined;
 	var fZoom          = d3.behavior.zoom();
 	var fBatcher       = new BatchAction ( );
+	var fGroupCount    = 1;
 
 	var fChart       = undefined;
 	var fXAxis       = undefined;
@@ -861,11 +869,18 @@ var BarChart = new function ( ) {
 
 	    }
 
-	    fMinX = fSelectons.getMin( 'time' );
-	    fMaxX = fSelectons.getMax( 'time' );
+	    var newMin = fSelectons.getMin( 'time' );
+	    var newMax = fSelectons.getMax( 'time' );
 
-	    fX.domain( [fMinX, fMaxX] );
-	    fZoom.x(fX);
+	    if ( fMinSelection !== newMin || fMaxSelection !== newMax ) {
+		fMinX = newMin; 
+		fMaxX = newMax;
+		fMinSelection = newMin;
+		fMaxSelection = newMax;
+
+		fX.domain( [fMinX, fMaxX] );
+		fZoom.x(fX);
+	    }
 
 	    fY.domain([0, fMaxY]);
 	    fViz.schudleDraw();
@@ -884,7 +899,7 @@ var BarChart = new function ( ) {
 	    var days        = domainDelta/1000/DAY;
 	    var bandWidth   = width/days;
 
-	    fGroup.rangeRoundBands([0, bandWidth], .1);
+	    fGroup.rangeRoundBands([0, bandWidth], 0.1, 0.2);
 
 	    fX.range([0, width]);
 	    fY.range([height, 0]);
@@ -941,6 +956,7 @@ var BarChart = new function ( ) {
 		.text("Count Per-day")
 	    ;
 
+	    fX.domain( [fMinX, fMaxX] );
 
 	    fZoom
 		.x(fX)
@@ -956,9 +972,11 @@ var BarChart = new function ( ) {
 	function doZoom ( ) {
 
 	    var timeDomain = fX.domain( );
+	    fMinSelection = timeDomain[0].getTime();
+	    fMaxSelection = timeDomain[1].getTime()
 	    fSelectons.setSelection( 'time',
-				     timeDomain[0].getTime(), 
-				     timeDomain[1].getTime() );
+				     fMinSelection, 
+				     fMaxSelection );
 
 	}
 
@@ -996,16 +1014,23 @@ var BarChart = new function ( ) {
 	function doDraw ( ) {
 	    resize( );
 
-	    var sourceData = [];
+	    var sourceData  = [];
 	    var sourceNames = [];
+	    var dataKeys    = Object.keys( fD3Data );
+	    var colors      = [ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0] ];
 
-	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+	    for ( var i = 0 ; i < dataKeys.length ; i++ ) {
+		/*
 		var source       = fSources[i].sourceObject;
 		var color        = source.getColor();
 		var sourceKey    = source.getId();
-		var plotData     = fD3Data[ sourceKey ];
+		*/
+		var key      = dataKeys[i];
+		var plotData = fD3Data[ key ];
+		var color    = colors[i];
+
 		if ( plotData !== undefined ) {
-		    sourceData.push( [ i, fSources[i].name, plotData, color ] );
+		    sourceData.push( [ i, key, plotData, color ] );
 		    sourceNames.push( i );
 		}
 	    }
@@ -1027,7 +1052,6 @@ var BarChart = new function ( ) {
 		.call(fYAxis)
 	    ;
 
-	    //console.log( "sourceData: ", sourceData ); //BOOG
 	    var sources = fChart.selectAll( ".bar-chart-data" )
 		.data( sourceData, function ( d ) { return d[0] } )
 	    ;
@@ -1047,6 +1071,7 @@ var BarChart = new function ( ) {
 		    return "translate( " + fGroup(d[0]) + ", 0)";
 		})
 	    	.style("fill", function(d) { return formatColor(d[3]); })
+	    	.style("stroke-width", 0)
 	    ;
 
 	    sources.exit()
@@ -1102,13 +1127,23 @@ var BarChart = new function ( ) {
 	    fDays = Math.ceil( (maxTime - minTime)/(DAY * 1000) );
 	    var firstDay = snapBound( minTime, DAY * 1000 );
 
-	    if ( fDataBuffer.length * 2 < fDays ) {
-		console.log( "extending data buffer to %s", fDays * 4 );
+	    var groups    = { 
+		0 : 0,
+		1 : 2,
+	    };
+
+	    fGroupCount = 2; // BUG: this sould be genrelized
+
+	    var entryLength = 2 * fGroupCount;
+
+	    if ( fDataBuffer.length * entryLength < fDays ) {
 		// Expand to be twice the required number of days
-		fDataBuffer = new float32array( fDays * 4 );
+		var newLength = fDays * entryLength * 2;
+		console.log( "extending data buffer to %s", newLength );
+		fDataBuffer = new float32array( newLength );
 	    }
 
-	    for ( var i = 0 ; i < fDays *2 ; i++ )
+	    for ( var i = 0 ; i < fDays * entryLength ; i++ )
 		  fDataBuffer[i] = 0;
 
 	    for ( var i = 0 ; i < stop ; i++ ) {
@@ -1117,48 +1152,49 @@ var BarChart = new function ( ) {
 		var lon = data[index];
 		var lat = data[index+1];
 
-		if ( !(
-		           lon < maxLon 
-			&& lon > minLon 
-			&& lat > minLat 
-			&& lat < maxLat ) )
-		    continue;
-
+		
 		if ( minLon > lon || maxLon < lon )
 		    continue;
 
 		if ( minLat > lat || maxLat < lat ) 
 		    continue;
+		
 
 		var day = snapBound( data[index+2] + start, DAY ) * 1000;
+		var hwid = data[index+3];
+		var good = data[index+4];
 
+		var groupOffset = groups[ good ];
 		
 		if ( day < firstDay )
 		    continue;
 		
-		var dataIndex = 2 * (day - firstDay)/(DAY * 1000);
+		var dataIndex = groupOffset + entryLength * (day - firstDay)/(DAY * 1000);
 
 		fDataBuffer[dataIndex] = day;
 		fDataBuffer[dataIndex+1]++;
 	    }
 
-	    var resultData = [];
+	    for ( var g = 0 ; g < fGroupCount ; g++ ) {
+		var resultData = [];
+		 // BUG: this is wrong but should work for now
+		var groupOffset = groups[ g ];
 
-	    for ( var i = 0 ; i < fDays ; i++ ) {
-		var index = i*2;
-		var time  = fDataBuffer[index];
-		var value = fDataBuffer[index+1];
+		for ( var i = 0 ; i < fDays ; i++ ) {
+		    var index = i*entryLength + groupOffset;
+		    var time  = fDataBuffer[index];
+		    var value = fDataBuffer[index+1];
+		    
+		    if ( fMinY === undefined || value )
+			fMinY = value;
 
-		if ( fMinY === undefined || value )
-		    fMinY = value;
+		    if ( fMaxY === undefined || fMaxY < value )
+			fMaxY = value;
 
-		if ( fMaxY === undefined || fMaxY < value )
-		    fMaxY = value;
-
-		resultData.push( [time, value] );
+		    resultData.push( [time, value] );
+		}
+		fD3Data[sourceKey + ":" + g ] = resultData;
 	    }
-
-	    fD3Data[sourceKey] = resultData;
 	}
 
 
@@ -1494,6 +1530,8 @@ function doGlDraw ( gl, glVars, fieldsCount,
     var xScale = width/(xMax - xMin);
     var yScale = height/(yMax - yMin);
 
+    var pointSize = Math.max( 2, 0.05 * xScale );
+
     // Scale from base units to pixles
     vec3.set(translation, xScale, yScale, 1);
     mat4.scale(matrix, matrix, translation);
@@ -1532,7 +1570,7 @@ function doGlDraw ( gl, glVars, fieldsCount,
     gl.uniform1f(selectionMaxLoc, timeMax/1000);
 
     var pointSizeLoc = gl.getUniformLocation(glVars.shader, "uPointSize");
-    gl.uniform1f(pointSizeLoc, 2 );
+    gl.uniform1f(pointSizeLoc, pointSize );
 
     var hwidLoc = gl.getUniformLocation(glVars.shader, "uHwid");
     gl.uniform1f(hwidLoc, 0 );
