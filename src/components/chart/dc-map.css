@@ -44,9 +44,9 @@ body {
 
 .gl-view {
     background-color : black ;
-    overflow : hidden ;
-    float : left;
-    position  : relative;
+    overflow         : hidden ;
+    float            : left;
+    position         : relative;
 
 }
 
@@ -57,10 +57,16 @@ body {
 }
 
 .item {
-   color        : white;
-   float        : left;
-   padding-left : 1em;
-   list-style   : none;
+   color         : white;
+   float         : left;
+   padding-left  : 0.5em;
+   padding-right : 0.5em;
+   list-style    : none;
+   cursor        : pointer;
+}
+
+.item:hover {
+    background : gold;
 }
 
 .selected {

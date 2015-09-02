@@ -1254,6 +1254,7 @@ var ItemList = new function ( ) {
 	var fSourceBuffers = {};
 	var fListData      = [];
 	var fItemListNode  = d3.select( fRoot ).select(".item-list");
+	var fCurrentSat    = 0;
 
 	var fBatcher = new BatchAction ( );
 
@@ -1320,6 +1321,7 @@ var ItemList = new function ( ) {
 		if ( selected === true ) {
 		    node.classList.remove('selected');
 		    fSelectons.setSelection( 'hwid', 0, 0 );
+		    fCurrentSat = 0;
 		}
 
 		else {
@@ -1331,11 +1333,22 @@ var ItemList = new function ( ) {
 		    node.classList.add('selected');
 
 		    fSelectons.setSelection( 'hwid', d, d );
+		    fCurrentSat = d;
 		}
 
 		fViz.schudleDraw();
 	    } );
-	    
+
+	    node.addEventListener('mouseenter', function ( event ) {
+		event.stopPropagation();
+		fSelectons.setSelection( 'hwid', d, d );
+	    });
+
+	    node.addEventListener('mouseleave', function ( event ) {
+		event.stopPropagation();
+		fSelectons.setSelection( 'hwid', fCurrentSat, fCurrentSat );
+	    });
+
 	}
 
 	function doDraw ( ) {
