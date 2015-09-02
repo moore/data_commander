@@ -375,171 +375,6 @@ function loadGlBuffer ( loadFunction, tilePointer, bufferInfo, start, end, proje
 }
 
 
-var ZoomHandler = new function ( ) {
-    return constructor;
-
-    function constructor ( fRoot, fGroup, fLockZoom, fX, fY ) {
-
-	var self = {};
-
-	if ( fX === undefined )
-	    fX = d3.scale.linear();
-
-	if ( fY === undefined )
-	    fY = d3.scale.linear();
-
-	var fDoZoomY     = false;
-	var fScaleX      = 1;
-	var fTranslateX  = 0;
-	var fScaleY      = 1;
-	var fTranslateY  = 0;
-	var fZoom        = d3.behavior.zoom();
-	var fListeners   = [];
-
-	initScales();
-
-	d3.select(fRoot).call(fZoom);
-
-        fZoom
-	    .x(fX)
-	    .y(fY)
-	    .on("zoom", doZoom)
-	;
-	
-	initZoomY();
-
-	self.domainZoomed = domainZoomed;
-	self.addListener  = addListener;
-	self.getScale     = getScale;
-	self.getTranslate = getTranslate;
-	self.setXDomain   = setXDomain;
-	self.setYDomain   = setYDomain;
-
-	return self;
-
-	function initScales ( ) {
-	    var elementBox = fRoot.getBoundingClientRect();
-	    var width      = elementBox.width;
-	    var height     = elementBox.height;
-
-	    fX.range( [width, 0] );
-	    fY.range( [0, height] );
-
-	    fZoom
-		.x(fX)
-		.y(fY)
-	    ;
-	}
-
-
-	function domainZoomed ( ) {
-	    var xDomain = fX.domain();
-	    var yDomain = fY.domain();
-
-	    return { 
-		xMin : xDomain[0], 
-		xMax : xDomain[1], 
-		yMin : yDomain[0], 
-		yMax : yDomain[1], 
-	    };
-	}
-
-	function setXDomain ( minVal, maxVal ) {
-	    initScales(); //BUG: this should be elewhere
-
-	    fX.domain([minVal, maxVal] );
-	    fZoom.x(fX);
-	}
-
-	function setYDomain ( minVal, maxVal ) {
-	    fY.domain([minVal, maxVal] );
-	    fZoom.y(fY);
-	}
-	
-	function addListener ( callback ) {
-	    fListeners.push( callback );
-	}
-
-
-
-
-	function getScale ( ) {
-	    return [ fScaleX, fScaleY ];
-	}
-
-
-	function getTranslate ( ) {
-	    return [ fTranslateX, fTranslateY ];
-	}
-
-
-	function initZoomY ( ) {
-	    var checkbox = fRoot.querySelector( "#zoom-y" );
-
-	    if ( checkbox === null )
-		return;
-
-	    checkbox.onclick = function ( ) {
-
-		var translate = fZoom.translate();
-
-		if ( checkbox.checked === false ) {
-		    fZoom.scale( fScaleX );
-		    translate[0] = fTranslateX;
-		}
-		
-		else {
-		    fZoom.scale( fScaleY );
-		    translate[1] = fTranslateY;
-		}
-
-		fZoom.translate( translate );
-
-		fDoZoomY = checkbox.checked ;
-	    }
-	}
-
-	function triggerEvents ( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage ) {
-	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
-		fListeners[i]( self, xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
-	    }
-	}
-
-	function doZoom ( ) {
-	    var translate = fZoom.translate();
-	    var scale     = fZoom.scale();
-
-	    var xScaleChange    = 1;
-	    var yScaleChange    = 1;
-	    var xTranslateChage = 0;
-	    var yTranslateChage = 0;
-
-	    var elementBox = fRoot.getBoundingClientRect();
-	    var width      = elementBox.width;
-	    var height     = elementBox.height;
-
-	    if ( fLockZoom === true || fDoZoomY === true ) {
-		yScaleChange    = scale/fScaleY;
-		yTranslateChage = (fTranslateY -translate[1])/scale/height;
-
-		fScaleY     = scale;
-		fTranslateY =  translate[1];
-	    }
-	    
-	    if ( fLockZoom === true || fDoZoomY === false ) {
-		xScaleChange    = scale/fScaleX;
-		xTranslateChage = (fTranslateX -translate[0])/scale/width;
-
-		fScaleX     = scale;
-		fTranslateX = translate[0];
-	    }
-
-	    triggerEvents( xScaleChange, yScaleChange, xTranslateChage, yTranslateChage );
-
-	}
-    }
-};
-
 var BasePlot = new function ( ) {
     var sId = 0;
     return factory;
@@ -971,10 +806,11 @@ var BarChart = new function ( ) {
 
 
 	function doZoom ( ) {
-
 	    var timeDomain = fX.domain( );
+
 	    fMinSelection = timeDomain[0].getTime();
-	    fMaxSelection = timeDomain[1].getTime()
+	    fMaxSelection = timeDomain[1].getTime();
+
 	    fSelectons.setSelection( 'time',
 				     fMinSelection, 
 				     fMaxSelection );
