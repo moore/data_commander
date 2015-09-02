@@ -715,12 +715,10 @@ var BarChart = new function ( ) {
 	    var newMax = fSelectons.getMax( 'time' );
 
 	    if ( fMinSelection !== newMin || fMaxSelection !== newMax ) {
-		fMinX = newMin; 
-		fMaxX = newMax;
 		fMinSelection = newMin;
 		fMaxSelection = newMax;
 
-		fX.domain( [fMinX, fMaxX] );
+		fX.domain( [fMinSelection, fMaxSelection] );
 		fZoom.x(fX);
 	    }
 
@@ -819,7 +817,8 @@ var BarChart = new function ( ) {
 	    	.style("stroke-width", 0)
 	    ;    
 
-	     fX.domain( [fMinX, fMaxX] );
+	    fX.domain( [fMinSelection, fMaxSelection] );
+
 	    fZoom
 		.x(fX)
 		.on("zoom", doZoom)
@@ -984,8 +983,8 @@ var BarChart = new function ( ) {
 	    var minLon = fSelectons.getMin( "lon" );
 	    var maxLon = fSelectons.getMax( "lon" );
 
-	    var minTime = fSelectons.getMin( "time" );
-	    var maxTime = fSelectons.getMax( "time" );
+	    var minTime = fMinX;
+	    var maxTime = fMaxX;
 
 	    var minHwid = fSelectons.getMin( "hwid" );
 	    var maxHwid = fSelectons.getMax( "hwid" );
