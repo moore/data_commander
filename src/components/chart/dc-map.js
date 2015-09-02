@@ -96,6 +96,13 @@ new function() {
 			 column : 'time',
 		     } );
 
+	viz.addView( ItemList, "#sat",  
+		     plot2Data,
+		     {
+			 group  : 2,
+			 column : 'hwid',
+		     } );
+
 	
 	return viz;
 

@@ -711,6 +711,7 @@ var ScatterPlot = new function ( ) {
 		var valueMax = fSelectons.getMax( 'lat' );
 		var timeMin  = fSelectons.getMin( 'time' );
 		var timeMax  = fSelectons.getMax( 'time' );
+		var hwid     = fSelectons.getMin( 'hwid' );
 
 		if ( valueMin === undefined )
 		    valueMin = fMinY;
@@ -722,7 +723,7 @@ var ScatterPlot = new function ( ) {
 		
 		doGlDraw( fGl, fGlVars, fieldsCount,
 			  indexMin, indexMax, valueMin, valueMax,
-			  timeMin, timeMax,
+			  timeMin, timeMax, hwid,
 			  top, left, width, height, data, color );
 	    }
 
@@ -813,7 +814,7 @@ var BarChart = new function ( ) {
 	if ( options.groupBy !== undefined )
 	    fGroupBy = options.groupBy.slice(0);
 
-	var self = BasePlot( fRoot, options, fX, fY );
+	var self = BasePlot( fRoot, options );
 
 	return init( self, fViz, fRoot, fGl, fSelectons, fColumn, fGroupBy, fX, fY );
     }
@@ -1124,8 +1125,11 @@ var BarChart = new function ( ) {
 	    var minTime = fSelectons.getMin( "time" );
 	    var maxTime = fSelectons.getMax( "time" );
 
+	    var minHwid = fSelectons.getMin( "hwid" );
+	    var maxHwid = fSelectons.getMax( "hwid" );
+
 	    fDays = Math.ceil( (maxTime - minTime)/(DAY * 1000) );
-	    var firstDay = snapBound( minTime, DAY * 1000 );
+	    var firstDay = snapBound( minTime/1000, DAY );
 
 	    var groups    = { 
 		0 : 0,
@@ -1140,7 +1144,7 @@ var BarChart = new function ( ) {
 		// Expand to be twice the required number of days
 		var newLength = fDays * entryLength * 2;
 		console.log( "extending data buffer to %s", newLength );
-		fDataBuffer = new float32array( newLength );
+		fDataBuffer = new Float32Array( newLength );
 	    }
 
 	    for ( var i = 0 ; i < fDays * entryLength ; i++ )
@@ -1149,9 +1153,9 @@ var BarChart = new function ( ) {
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*projection.length;
 
-		var lon = data[index];
-		var lat = data[index+1];
-
+		var lon  = data[index];
+		var lat  = data[index+1];
+		var hwid = data[index+3] | 0;
 		
 		if ( minLon > lon || maxLon < lon )
 		    continue;
@@ -1159,8 +1163,11 @@ var BarChart = new function ( ) {
 		if ( minLat > lat || maxLat < lat ) 
 		    continue;
 		
+		if ( ( maxHwid !== 0 && minHwid !== 0 ) && ( minHwid > hwid || maxHwid < hwid )  )
+		    continue;
 
-		var day = snapBound( data[index+2] + start, DAY ) * 1000;
+
+		var day = snapBound( data[index+2] + start, DAY );
 		var hwid = data[index+3];
 		var good = data[index+4];
 
@@ -1169,7 +1176,7 @@ var BarChart = new function ( ) {
 		if ( day < firstDay )
 		    continue;
 		
-		var dataIndex = groupOffset + entryLength * (day - firstDay)/(DAY * 1000);
+		var dataIndex = groupOffset + entryLength * (day - firstDay)/(DAY);
 
 		fDataBuffer[dataIndex] = day;
 		fDataBuffer[dataIndex+1]++;
@@ -1182,7 +1189,7 @@ var BarChart = new function ( ) {
 
 		for ( var i = 0 ; i < fDays ; i++ ) {
 		    var index = i*entryLength + groupOffset;
-		    var time  = fDataBuffer[index];
+		    var time  = fDataBuffer[index] * 1000;
 		    var value = fDataBuffer[index+1];
 		    
 		    if ( fMinY === undefined || value )
@@ -1228,6 +1235,209 @@ var BarChart = new function ( ) {
 
 };
 
+var ItemList = new function ( ) {
+    return factory;
+
+    function factory ( fViz, fRoot, fGl, fSelectons, options ) {
+	var fColumn = options.column;
+
+	var self = BasePlot( fRoot, options );
+
+	return init( self, fViz, fRoot, fGl, fSelectons, fColumn );
+    }
+
+    function init ( self, fViz, fRoot, fGl, fSelectons, fColumn ) {
+
+	var fSources       = [];
+	var fListeners     = [];
+	var fD3Data        = {};
+	var fSourceBuffers = {};
+	var fListData      = [];
+	var fItemListNode  = d3.select( fRoot ).select(".item-list");
+
+	var fBatcher = new BatchAction ( );
+
+	var fChart       = undefined;
+	var fDataBuffer  = new Float32Array( 65536 );
+
+	fSelectons.addListener( selectionChanged );
+
+	self.doDraw  = doDraw;
+	self.addData = addData;
+
+	return self;
+
+	function selectionChanged ( keys ) {
+	    fBatcher.batch( selectionChangedWorker );
+	}
+	
+
+	function selectionChangedWorker () {
+	  
+	    for ( var i = 0 ; i < fSources.length ; i++ ) {
+		var source = fSources[i];
+		
+		recomputeData( fSources[i] );
+	    }
+
+	    fViz.schudleDraw();
+	}
+
+
+	function addData ( sourceObject ) {
+
+	    var bufferInfo  = { 
+		offset    : 0, 
+		data      : new Float32Array(1024 * 1024), 
+		glPointer : fGl.createBuffer(),
+	    };
+
+	    var sourceConfig = {};
+
+	    sourceConfig.bufferInfo   = bufferInfo;
+	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.sourceObject = sourceObject;
+	    sourceConfig.projection   = sourceObject.getProjection();
+	    sourceConfig.name         = "bob";
+
+	    fSources.push( sourceConfig );
+
+	    sourceObject.addListener( handleNewData, sourceConfig );
+
+	    fSourceBuffers[ sourceObject.getId() ] = [];
+	}
+
+
+	function setItemText ( d ) {
+	    var node = this;
+	    node.innerText = ("0000" + d.toString(16)).substr(-4);
+	    
+	    node.addEventListener('click', function ( event ) {
+		event.stopPropagation();
+
+		var selected = node.classList.contains('selected'); 
+
+		if ( selected === true ) {
+		    node.classList.remove('selected');
+		    fSelectons.setSelection( 'hwid', 0, 0 );
+		}
+
+		else {
+		    var current = fItemListNode.node().querySelector( ".selected" );
+		    
+		    if ( current !== null )
+			current.classList.remove('selected');
+
+		    node.classList.add('selected');
+
+		    fSelectons.setSelection( 'hwid', d, d );
+		}
+
+		fViz.schudleDraw();
+	    } );
+	    
+	}
+
+	function doDraw ( ) {
+	    
+	    var bars = fItemListNode.selectAll( '.item' )
+		.data( fListData, function (d) { return d } )
+	    ;
+	    
+	    bars.sort( d3.ascending );
+
+	    bars.enter()
+		.append( 'li' )
+		.classed( 'item', true)
+		.each( setItemText )
+	    ;
+
+	    bars.exit()
+		.remove()
+	    ;
+	}
+
+	
+	function recomputeData ( sourceConfig, dataInfo ) {
+	    var projection   = sourceConfig.projection;
+	    var bufferInfo   = sourceConfig.bufferInfo;
+
+	    var data       = bufferInfo.data;
+	    var stop       = bufferInfo.offset/projection.length;
+	    
+	    var minLat = fSelectons.getMin( "lat" );
+	    var maxLat = fSelectons.getMax( "lat" );
+
+	    var minLon = fSelectons.getMin( "lon" );
+	    var maxLon = fSelectons.getMax( "lon" );
+
+	    var minTime = fSelectons.getMin( "time" );
+	    var maxTime = fSelectons.getMax( "time" );
+
+	    for ( var i = 0 ; i < fDataBuffer.length ; i++ )
+		fDataBuffer[i] = 0;
+
+	    for ( var i = 0 ; i < stop ; i++ ) {
+		var index = i*projection.length;
+
+		var lon   = data[index];
+		var lat   = data[index+1];
+		var time  = data[index+2] * 1000;
+		var hwid  = data[index+3] | 0;
+		//var good  = data[index+4];
+		
+		if ( minLon > lon || maxLon < lon )
+		    continue;
+
+		if ( minLat > lat || maxLat < lat ) 
+		    continue;
+		
+		if ( minTime > time || maxTime < time )
+		    continue;
+
+		fDataBuffer[ hwid ] += 1;
+	    }
+
+	    fListData.length = 0;
+
+	    for ( var i = 0 ; i < fDataBuffer.length ; i++ ) {
+		if ( fDataBuffer[i] > 0 )
+		    fListData.push( i );
+	    }
+
+	    fListData.sort( d3.ascending );
+	}
+
+
+	function handleNewData ( source, tileArrays, sourceConfig ) {
+
+	    var projection   = sourceConfig.projection;
+	    var loadFunction = sourceConfig.loadFunction;
+	    var bufferInfo   = sourceConfig.bufferInfo;
+	    var source       = sourceConfig.sourceObject;
+	    //BUG: I I should not have to do unit conversion hear!
+	    var start        = source.getStart()/1000;
+	    var end          = source.getEnd()/1000;
+	    var sourceKey    = source.getId();
+
+	    for ( var i = 0 ; i < tileArrays.length ; i++ ) {
+		var tileArray    = tileArrays[ i ];
+		var tilePointer  = loadBuffer( tileArray );
+
+		var dataInfo =
+		    loadGlBuffer( loadFunction, tilePointer, 
+				  bufferInfo, start, end, projection );
+
+		fSourceBuffers[ sourceKey ].push( dataInfo );
+
+		freeBuffer( tilePointer );
+	    }
+
+	    fBatcher.batch( selectionChangedWorker );
+	}
+    }
+
+};
 
 var Map = new function ( ) {
     return factory;
@@ -1504,9 +1714,8 @@ var Viz = new function ( ) {
 
 function doGlDraw ( gl, glVars, fieldsCount,
 		    xMin, xMax, yMin, yMax,
-		    timeMin, timeMax,
+		    timeMin, timeMax, hwid,
 		    top, left, width, height, data, color ) {
-
     var glWidth  = gl.canvas.clientWidth;
     var glHeight = gl.canvas.clientHeight;
 
@@ -1572,8 +1781,11 @@ function doGlDraw ( gl, glVars, fieldsCount,
     var pointSizeLoc = gl.getUniformLocation(glVars.shader, "uPointSize");
     gl.uniform1f(pointSizeLoc, pointSize );
 
-    var hwidLoc = gl.getUniformLocation(glVars.shader, "uHwid");
-    gl.uniform1f(hwidLoc, 0 );
+    if ( hwid === undefined )
+	hwid = 0;
+
+    var hwidLoc = gl.getUniformLocation(glVars.shader, "hwid");
+    gl.uniform1f( hwidLoc, hwid );
 
     var colorLoc = gl.getUniformLocation(glVars.shader, "color");
     gl.uniform3fv(colorLoc, color );
@@ -1583,7 +1795,7 @@ function doGlDraw ( gl, glVars, fieldsCount,
 	var info = data[i];
 
 	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 4 * fieldsCount, info.dataOffset * 4);
-	// BUG: even thou we will not use .y it could walk of the end of the buffer :(
+	// BUG: even thou we will not use .yzw they could walk of the end of the buffer :(
 	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 4 * fieldsCount, 4 + info.dataOffset * 4);
 	gl.vertexAttribPointer(glVars.selection, 2, gl.FLOAT, false, 4 * fieldsCount, 8 + info.dataOffset * 4);
 	gl.vertexAttribPointer(glVars.hwid, 2, gl.FLOAT, false, 4 * fieldsCount, 12 + info.dataOffset * 4);
