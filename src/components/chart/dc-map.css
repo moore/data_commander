@@ -54,6 +54,7 @@ body {
     transform : translateZ(0);
     overflow  : hidden;
     clear     : both;
+    width     : 600px;
 }
 
 .item {

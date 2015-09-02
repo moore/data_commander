@@ -679,6 +679,10 @@ var BarChart = new function ( ) {
 	var fDays        = 0;
 
 	var fMargin = {top: 30, right: 60, bottom: 80, left: 60};
+	var fWidth;
+	var fHeight;
+	var fZoomBox;
+	var fChartBars;
 
 	initChart( );
 
@@ -690,20 +694,22 @@ var BarChart = new function ( ) {
 	return self;
 
 	function selectionChanged ( keys ) {
-	    fBatcher.batch( selectionChangedWorker );
+	    // BUG: assumes only we change time
+	    if ( keys.length > 1 || keys[0] != "time" ) 
+		fBatcher.batch( selectionChangedWorker );
 	}
 	
 
-	function selectionChangedWorker () {
+	function selectionChangedWorker ( ) {
 	    fMinY = undefined;
 	    fMaxY = undefined;
+
 
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var source = fSources[i];
 		
 		recomputeData( fSources[i] );
-
-	    }
+	    }	 
 
 	    var newMin = fSelectons.getMin( 'time' );
 	    var newMax = fSelectons.getMax( 'time' );
@@ -727,26 +733,37 @@ var BarChart = new function ( ) {
 
 	    var elementBox = fRoot.getBoundingClientRect();
 
-	    width  = elementBox.width - fMargin.left - fMargin.right;
-	    height = elementBox.height - fMargin.top - fMargin.bottom;
+	    fWidth  = elementBox.width - fMargin.left - fMargin.right;
+	    fHeight = elementBox.height - fMargin.top - fMargin.bottom;
 	    
+	    fWidth  = Math.max( fWidth, 0 );
+	    fHeight = Math.max( fHeight, 0 );
+
 	    var xDomain     = fX.domain();
 	    var domainDelta = xDomain[1].getTime() - xDomain[0].getTime();
 	    var days        = domainDelta/1000/DAY;
-	    var bandWidth   = width/days;
+	    var bandWidth   = fWidth/days;
 
 	    fGroup.rangeRoundBands([0, bandWidth], 0.1, 0.2);
 
-	    fX.range([0, width]);
-	    fY.range([height, 0]);
+	    fX.range([0, fWidth]);
+	    fY.range([fHeight, 0]);
+
+	    fZoom.x(fX);
 
 	    fChart
 	    	.attr("transform", "translate(" + fMargin.left + "," + fMargin.top + ")")
 	    ;
 
+	    fZoomBox
+		.attr("x", 0 )
+		.attr("y", 0 )
+		.attr("width", fWidth ) 
+		.attr("height", fHeight )
+	    ;
 
 	    fChart.select(".x-axis")
-		.attr("transform", "translate(0," + height + ")")
+		.attr("transform", "translate(0," + fHeight + ")")
 		.call(fXAxis)
 	    ;
 
@@ -756,8 +773,6 @@ var BarChart = new function ( ) {
 	}
 
 	function initChart ( ) {
-	    
-	    var elementBox = fRoot.getBoundingClientRect();
 	    
 	    fGroup = d3.scale.ordinal();
 
@@ -776,6 +791,7 @@ var BarChart = new function ( ) {
 		.classed("content", true)
 	    ;
 
+
 	    fChart.append("g")
 		.attr("class", "x-axis")
 		.call(fXAxis)
@@ -792,14 +808,24 @@ var BarChart = new function ( ) {
 		.text("Count Per-day")
 	    ;
 
-	    fX.domain( [fMinX, fMaxX] );
+	    fChartBars = fChart.append("g")
+		.classed("bars-container", true )
+	    ;
 
+	    fZoomBox = fChart
+		.append("rect")
+		.classed("zoomBox", true)
+		.style("fill", "rgba(0,0,0,0)" )
+	    	.style("stroke-width", 0)
+	    ;    
+
+	     fX.domain( [fMinX, fMaxX] );
 	    fZoom
 		.x(fX)
 		.on("zoom", doZoom)
 	    ;
 
-	    d3.select(fRoot).call(fZoom);
+	    fZoomBox.call(fZoom);
 
 	    resize();
 	}
@@ -889,7 +915,7 @@ var BarChart = new function ( ) {
 		.call(fYAxis)
 	    ;
 
-	    var sources = fChart.selectAll( ".bar-chart-data" )
+	    var sources = fChartBars.selectAll( ".bar-chart-data" )
 		.data( sourceData, function ( d ) { return d[0] } )
 	    ;
 
@@ -923,15 +949,15 @@ var BarChart = new function ( ) {
 		.append( 'rect' )
 		.attr( 'x', function (d) { return fX( d[0] ) } )
 		.attr( 'y', function (d) { return fY( d[1] ) } )
-	    	.attr( 'width', fGroup.rangeBand() )
-		.attr( 'height', function (d) { return height - fY( d[1] ) } )
+	    	.attr( 'width', Math.max( 1, fGroup.rangeBand() ) )
+		.attr( 'height', function (d) { return fHeight - fY( d[1] ) } )
 	    ;
 
 	    bars
 		.attr( 'x', function (d) { return fX( d[0] ) } )
 		.attr( 'y', function (d) { return fY( d[1] ) } )
-	    	.attr( 'width', fGroup.rangeBand() )
-		.attr( 'height', function (d) {  return height - fY( d[1] ) } )
+	    	.attr( 'width', Math.max( 1, fGroup.rangeBand() ) )
+		.attr( 'height', function (d) {  return fHeight - fY( d[1] ) } )
 
 	    ;
 
