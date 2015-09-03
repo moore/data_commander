@@ -729,7 +729,7 @@ var BarChart = new function ( ) {
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var source = fSources[i];
 		
-		recomputeData( fSources[i] );
+		recomputeData( fSources[i], 0 );
 	    }	 
 
 	    var newMin = fSelectons.getMin( 'time' );
@@ -997,7 +997,7 @@ var BarChart = new function ( ) {
 	}
 
 	
-	function recomputeData ( sourceConfig, dataInfo ) {
+	function recomputeData ( sourceConfig, offset ) {
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
@@ -1035,16 +1035,23 @@ var BarChart = new function ( ) {
 		var newLength = days * entryLength * 2;
 		console.log( "extending data buffer to %s", newLength );
 		fDataBuffer = new Float32Array( newLength );
+		offset = 0;
 	    }
 
 
-	    for ( var i = 0 | 0; i < days * entryLength ; i++ )
+	    for ( var i = offset | 0; i < days * entryLength ; i++ )
 		  fDataBuffer[i] = 0;
 
 	    var columns = projection.length;
 
+	    // BUG: we shold try and start iteration at offset
+	    // but that would require that requires lots of
+	    // changes.
 	    for ( var i = 0 | 0; i < stop ; i++ ) {
 		var index = i*columns | 0;
+
+		if ( index < offset )
+		    continue;
 
 		var lon  = data[index];
 		var lat  = data[index+1];
@@ -1067,7 +1074,7 @@ var BarChart = new function ( ) {
 
 		var good = data[index+4] | 0;
 
-		var groupOffset = groups[ good ] ;
+		var groupOffset = good * 2 ;
 		
 		var dataIndex = (groupOffset + entryLength * (day - firstDay)/(DAY)) | 0;
 
@@ -1075,15 +1082,15 @@ var BarChart = new function ( ) {
 		fDataBuffer[dataIndex+1]++;
 	    }
 
-	    updateD3Data( groups, sourceKey, entryLength );
+	    updateD3Data( sourceKey, entryLength );
 	}
 
 
-	function updateD3Data ( groups, sourceKey, entryLength ) {
+	function updateD3Data ( sourceKey, entryLength ) {
 	    for ( var g = 0 ; g < fGroupCount ; g++ ) {
 		var resultData = [];
 		 // BUG: this is wrong but should work for now
-		var groupOffset = groups[ g ];
+		var groupOffset = g*2;
 
 		for ( var i = 0 ; i < fDays ; i++ ) {
 		    var index = i*entryLength + groupOffset;
@@ -1102,6 +1109,7 @@ var BarChart = new function ( ) {
 	    }
 	}
 
+
 	function handleNewData ( source, bufferInfo, newData, sourceConfig ) {
 
 
@@ -1115,7 +1123,11 @@ var BarChart = new function ( ) {
 	    }
 	    
 
-	    fBatcher.batch( selectionChangedWorker );
+	    // BUG: this is kinda sketchy just using newData[0].dataOffset
+	    recomputeData( sourceConfig, newData[0].dataOffset );
+
+	    fY.domain([0, fMaxY]);
+	    fViz.schudleDraw();
 	}
     }
 
@@ -1161,11 +1173,14 @@ var ItemList = new function ( ) {
 	
 
 	function selectionChangedWorker () {
-	  
+	    
+	    for ( var i = 0 ; i < fDataBuffer.length ; i++ )
+		fDataBuffer[i] = 0;
+
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var source = fSources[i];
 		
-		recomputeData( fSources[i] );
+		recomputeData( fSources[i], 0 );
 	    }
 
 	    fViz.schudleDraw();
@@ -1258,7 +1273,7 @@ var ItemList = new function ( ) {
 	}
 
 	
-	function recomputeData ( sourceConfig, dataInfo ) {
+	function recomputeData ( sourceConfig, offset ) {
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 
@@ -1274,11 +1289,11 @@ var ItemList = new function ( ) {
 	    var minTime = fSelectons.getMin( "time" );
 	    var maxTime = fSelectons.getMax( "time" );
 
-	    for ( var i = 0 ; i < fDataBuffer.length ; i++ )
-		fDataBuffer[i] = 0;
-
 	    for ( var i = 0 ; i < stop ; i++ ) {
 		var index = i*projection.length;
+
+		if ( index < offset )
+		    continue;
 
 		var lon   = data[index];
 		var lat   = data[index+1];
@@ -1320,7 +1335,10 @@ var ItemList = new function ( ) {
 		fSourceBuffers[ sourceKey ].push( newData[i] );
 	    }
 
-	    fBatcher.batch( selectionChangedWorker );
+	    recomputeData( sourceConfig, newData[0].dataOffset );
+
+	    fViz.schudleDraw();
+
 	}
     }
 
