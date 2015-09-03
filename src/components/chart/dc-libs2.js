@@ -683,6 +683,7 @@ var BarChart = new function ( ) {
 	var fHeight;
 	var fZoomBox;
 	var fChartBars;
+	var fClip;
 
 	initChart( );
 
@@ -696,11 +697,11 @@ var BarChart = new function ( ) {
 	function selectionChanged ( keys ) {
 	    // BUG: assumes only we change time
 	    if ( keys.length > 1 || keys[0] != "time" ) 
-		fBatcher.batch( selectionChangedWorker );
+		fBatcher.batch( selectionChangedWorker, [keys] );
 	}
 	
 
-	function selectionChangedWorker ( ) {
+	function selectionChangedWorker ( keys ) {
 	    fMinY = undefined;
 	    fMaxY = undefined;
 
@@ -754,8 +755,11 @@ var BarChart = new function ( ) {
 	    ;
 
 	    fZoomBox
-		.attr("x", 0 )
-		.attr("y", 0 )
+		.attr("width", fWidth ) 
+		.attr("height", fHeight )
+	    ;
+
+	    fClip
 		.attr("width", fWidth ) 
 		.attr("height", fHeight )
 	    ;
@@ -806,9 +810,16 @@ var BarChart = new function ( ) {
 		.text("Count Per-day")
 	    ;
 
+	    fClip = fChart.append("clipPath")
+		.attr("id", "clip")
+		.append("rect")
+	    ;
+
 	    fChartBars = fChart.append("g")
 		.classed("bars-container", true )
+		.attr("clip-path", "url(#clip)")
 	    ;
+
 
 	    fZoomBox = fChart
 		.append("rect")
@@ -970,12 +981,10 @@ var BarChart = new function ( ) {
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
-	    //BUG: I I should not have to do unit conversion hear!
-	    var start        = source.getStart()/1000;
 	    var sourceKey    = source.getId();
 
 	    var data       = bufferInfo.data;
-	    var stop       = bufferInfo.offset/projection.length;
+	    var stop       = (bufferInfo.offset/projection.length) | 0;
 	    
 	    var minLat = fSelectons.getMin( "lat" );
 	    var maxLat = fSelectons.getMax( "lat" );
@@ -986,63 +995,69 @@ var BarChart = new function ( ) {
 	    var minTime = fMinX;
 	    var maxTime = fMaxX;
 
-	    var minHwid = fSelectons.getMin( "hwid" );
-	    var maxHwid = fSelectons.getMax( "hwid" );
+	    var minHwid = fSelectons.getMin( "hwid" ) | 0;
+	    var maxHwid = fSelectons.getMax( "hwid" ) | 0;
 
-	    fDays = Math.ceil( (maxTime - minTime)/(DAY * 1000) );
+	    var days = Math.ceil( (maxTime - minTime)/(DAY * 1000) ) | 0;
+
+	    fDays = days;
+
 	    var firstDay = snapBound( minTime/1000, DAY );
 
-	    var groups    = { 
-		0 : 0,
-		1 : 2,
-	    };
+	    var groups = [0,2]; 
 
 	    fGroupCount = 2; // BUG: this sould be genrelized
 
-	    var entryLength = 2 * fGroupCount;
+	    var entryLength = 2 * fGroupCount | 0;
 
-	    if ( fDataBuffer.length * entryLength < fDays ) {
+	    if ( fDataBuffer.length * entryLength < days ) {
 		// Expand to be twice the required number of days
-		var newLength = fDays * entryLength * 2;
+		var newLength = days * entryLength * 2;
 		console.log( "extending data buffer to %s", newLength );
 		fDataBuffer = new Float32Array( newLength );
 	    }
 
-	    for ( var i = 0 ; i < fDays * entryLength ; i++ )
+	    for ( var i = 0 | 0; i < days * entryLength ; i++ )
 		  fDataBuffer[i] = 0;
 
-	    for ( var i = 0 ; i < stop ; i++ ) {
-		var index = i*projection.length;
+	    var columns = projection.length;
+
+	    for ( var i = 0 | 0; i < stop ; i++ ) {
+		var index = i*columns | 0;
 
 		var lon  = data[index];
 		var lat  = data[index+1];
 		var hwid = data[index+3] | 0;
 		
+		if ( ( maxHwid !== 0 && minHwid !== 0 ) 
+		     && ( minHwid > hwid || maxHwid < hwid )  )
+		    continue;
+
 		if ( minLon > lon || maxLon < lon )
 		    continue;
 
 		if ( minLat > lat || maxLat < lat ) 
 		    continue;
 		
-		if ( ( maxHwid !== 0 && minHwid !== 0 ) && ( minHwid > hwid || maxHwid < hwid )  )
-		    continue;
+		var day  = snapBound( data[index+2], DAY );
+		var good = data[index+4] | 0;
 
-
-		var day = snapBound( data[index+2] + start, DAY );
-		var hwid = data[index+3];
-		var good = data[index+4];
-
-		var groupOffset = groups[ good ];
+		var groupOffset = groups[ good ] ;
 		
 		if ( day < firstDay )
 		    continue;
 		
-		var dataIndex = groupOffset + entryLength * (day - firstDay)/(DAY);
+		var dataIndex = (groupOffset + entryLength * (day - firstDay)/(DAY)) | 0;
 
 		fDataBuffer[dataIndex] = day;
 		fDataBuffer[dataIndex+1]++;
 	    }
 
+	    updateD3Data( groups, sourceKey, entryLength );
+	}
+
+
+	function updateD3Data ( groups, sourceKey, entryLength ) {
 	    for ( var g = 0 ; g < fGroupCount ; g++ ) {
 		var resultData = [];
 		 // BUG: this is wrong but should work for now
@@ -1064,7 +1079,6 @@ var BarChart = new function ( ) {
 		fD3Data[sourceKey + ":" + g ] = resultData;
 	    }
 	}
-
 
 	function handleNewData ( source, tileArrays, sourceConfig ) {
 
@@ -1130,7 +1144,8 @@ var ItemList = new function ( ) {
 	return self;
 
 	function selectionChanged ( keys ) {
-	    fBatcher.batch( selectionChangedWorker );
+	    if ( keys.length > 1 || keys[0] !== 'hwid' )
+		fBatcher.batch( selectionChangedWorker );
 	}
 	
 
