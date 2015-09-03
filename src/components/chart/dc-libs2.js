@@ -1,12 +1,12 @@
 var BatchAction = new function ( ) {
     var LATER = Promise.resolve(true);
-
     return init;
 
     function init ( ) {
 	
 	var fBatchSchulded = false;
-	var fWork           = {};
+	var fSchudled      = {};
+	var fWork          = [];
 
 	var self = {};
 
@@ -15,8 +15,10 @@ var BatchAction = new function ( ) {
 	return self;
 
 	function batch ( callback, args ) {
-	    if ( fWork[ callback.name ] === undefined ) {
-		fWork[ callback.name ] = [ callback, args ];
+
+	    if ( fSchudled[ callback.name ] === undefined ) {
+		fSchudled[ callback.name ] = true;
+		fWork.push( [ callback, args ] );
 	    }
 
 	    if ( fBatchSchulded === false ) {
@@ -26,15 +28,16 @@ var BatchAction = new function ( ) {
 	}
 
 	function doBatches ( ) {
+	    var work = fWork;
+
 	    fBatchSchulded = false;
-	    var work = Object.keys( fWork );
+	    fWork          = [];
+	    fSchudled      = {};
 
 	    for ( var i = 0 ; i < work.length ; i++ ) {
-		var job = fWork[work[i]];
-		job[0].apply( job[0], job[1] );
+		var job = work[i];
+		job[0].call( job[0], job[1] );
 	    }
-
-	    fWork = {};
 	}
     }
 }; 
@@ -120,6 +123,8 @@ var RemoteData = new function ( ) {
 	var fRanges     = [];
 	var fSelectons  = [];
 	var fProjection = projection.slice(0);
+	var fBatcher    = new BatchAction ( );
+
 
 	for ( var i = 0 ; i < 2 ; i++ ) {
 	    fRanges.push({min: undefined, max: undefined} );
@@ -239,14 +244,14 @@ var RemoteData = new function ( ) {
 	function triggerEventsWorker ( ) {
 	    var newData = handleNewData( fNewData );
 
+	    fBatcher.batch( bindBuffer, fBufferInfo );
+
 	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
 		var callbackInfo = fListeners[i]; 
 		callbackInfo[0]( self, fBufferInfo, newData.slice(0), callbackInfo[1] );
 	    }
 
-	    fNewData.length = 0;
-	    
-	    bindBuffer( fBufferInfo );
+	    fNewData.length = 0;	    
 	}
 
 	function handleNewData ( tileArrays ) {
