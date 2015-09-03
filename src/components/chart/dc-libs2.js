@@ -1017,6 +1017,7 @@ var BarChart = new function ( ) {
 		fDataBuffer = new Float32Array( newLength );
 	    }
 
+
 	    for ( var i = 0 | 0; i < days * entryLength ; i++ )
 		  fDataBuffer[i] = 0;
 
@@ -1040,12 +1041,13 @@ var BarChart = new function ( ) {
 		    continue;
 		
 		var day  = snapBound( data[index+2], DAY );
-		var good = data[index+4] | 0;
-
-		var groupOffset = groups[ good ] ;
 		
 		if ( day < firstDay )
 		    continue;
+
+		var good = data[index+4] | 0;
+
+		var groupOffset = groups[ good ] ;
 		
 		var dataIndex = (groupOffset + entryLength * (day - firstDay)/(DAY)) | 0;
 
