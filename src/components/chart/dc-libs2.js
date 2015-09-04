@@ -11,8 +11,20 @@ var BatchAction = new function ( ) {
 	var self = {};
 
 	self.batch = batch;
+	self.idle  = idle;
 
 	return self;
+
+	function idle ( idelTime, callback, args ) {
+	    var name = callback.name;
+	    if ( fSchudled[ name ] === undefined ) {
+		fSchudled[ name ] = true;
+		setTimeout( function () { 
+		    callback( args ); 
+		    fSchudled[ name ] = undefined;
+		}, idelTime );
+	    }
+	}
 
 	function batch ( callback, args ) {
 
@@ -32,11 +44,11 @@ var BatchAction = new function ( ) {
 
 	    fBatchSchulded = false;
 	    fWork          = [];
-	    fSchudled      = {};
 
 	    for ( var i = 0 ; i < work.length ; i++ ) {
 		var job = work[i];
 		job[0].call( job[0], job[1] );
+		fSchudled[ job[0].name ] = undefined;
 	    }
 	}
     }
@@ -177,6 +189,8 @@ var RemoteData = new function ( ) {
 	var fListeners       = [];
 	var fNewData         = [];
 	var fEventsTriggeres = [];
+	var fLastRun         = performance.now();
+	var fRunTime         = 0;
 
 	self.getId           = getId;
 	self.getProjection   = getProjection;
@@ -230,7 +244,8 @@ var RemoteData = new function ( ) {
 	}
 
 	function triggerEvents (  ) {
-	    fBatcher.batch( triggerEventsWorker );
+	    var idelTime = fRunTime;
+	    fBatcher.idle( idelTime, triggerEventsWorker );
 	}
 
 
@@ -242,16 +257,20 @@ var RemoteData = new function ( ) {
 	}
 
 	function triggerEventsWorker ( ) {
+	    var startTime = performance.now()
 	    var newData = handleNewData( fNewData );
 
-	    fBatcher.batch( bindBuffer, fBufferInfo );
+	    bindBuffer( fBufferInfo );
 
 	    for ( var i = 0 ; i < fListeners.length ; i++ ) {
 		var callbackInfo = fListeners[i]; 
 		callbackInfo[0]( self, fBufferInfo, newData.slice(0), callbackInfo[1] );
 	    }
 
-	    fNewData.length = 0;	    
+	    fNewData.length = 0;
+	    
+	    fLastRun = performance.now();
+	    fRunTime = fLastRun - startTime;
 	}
 
 	function handleNewData ( tileArrays ) {
@@ -279,7 +298,7 @@ var RemoteData = new function ( ) {
 
 	function gotData ( dataArray, tileStart ) {
 	    fNewData.push( dataArray );
-	    triggerEvents( );
+	    triggerEvents();
 	}
 
 	function noData ( error, tileStart ) {
@@ -1504,8 +1523,6 @@ var Viz = new function ( ) {
 	gl.enable(gl.BLEND);
 	//gl.disable(gl.BLEND);
 	gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
-
-
 
 	var self = init( root, fetcher, canvas, gl, width, height );
 
