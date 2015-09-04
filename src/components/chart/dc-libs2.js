@@ -568,16 +568,9 @@ var ScatterPlot = new function ( ) {
 
 	function addData ( sourceObject ) {
 
-	    var bufferInfo  = { 
-		offset    : 0, 
-		data      : new Float32Array(1024 * 1024), 
-		glPointer : fGl.createBuffer(),
-	    };
-
 	    var sourceConfig = {};
 
-	    sourceConfig.bufferInfo   = bufferInfo;
-	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.bufferInfo   = undefined;
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = sourceObject.getProjection();
 
@@ -598,6 +591,10 @@ var ScatterPlot = new function ( ) {
 	    for ( var i = 0 ; i < fSources.length ; i++ ) {
 		var sourceConfig = fSources[i];
 		var bufferInfo   = sourceConfig.bufferInfo;
+
+		if ( bufferInfo === undefined )
+		    continue;
+
 		var source       = sourceConfig.sourceObject;
 		var color        = source.getColor();
 		var sourceKey    = source.getId();
@@ -617,6 +614,7 @@ var ScatterPlot = new function ( ) {
 
 		if ( valueMax === undefined )
 		    valueMax = fMaxY;
+
 
 		fGl.bindBuffer(fGl.ARRAY_BUFFER, bufferInfo.glPointer);
 		
@@ -902,20 +900,11 @@ var BarChart = new function ( ) {
 
 	function addData ( sourceObject ) {
 
-	    var bufferInfo  = { 
-		offset    : 0, 
-		data      : new Float32Array(1024 * 1024), 
-		glPointer : fGl.createBuffer(),
-	    };
-
 	    var sourceConfig = {};
 
-	    sourceConfig.bufferInfo   = bufferInfo;
-	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.bufferInfo   = undefined;
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = sourceObject.getProjection();
-	    sourceConfig.name         = "bob";
-
 	    fSources.push( sourceConfig );
 
 	    sourceObject.addListener( handleNewData, sourceConfig );
@@ -1029,6 +1018,10 @@ var BarChart = new function ( ) {
 	    var bufferInfo   = sourceConfig.bufferInfo;
 	    var source       = sourceConfig.sourceObject;
 	    var sourceKey    = source.getId();
+
+
+	    if ( bufferInfo === undefined )
+		return;
 
 	    var data       = bufferInfo.data;
 	    var stop       = (bufferInfo.offset/projection.length) | 0;
@@ -1216,20 +1209,12 @@ var ItemList = new function ( ) {
 
 
 	function addData ( sourceObject ) {
-
-	    var bufferInfo  = { 
-		offset    : 0, 
-		data      : new Float32Array(1024 * 1024), 
-		glPointer : fGl.createBuffer(),
-	    };
-
+	    
 	    var sourceConfig = {};
 
-	    sourceConfig.bufferInfo   = bufferInfo;
-	    sourceConfig.loadFunction = identityFunction;
+	    sourceConfig.bufferInfo   = undefined;
 	    sourceConfig.sourceObject = sourceObject;
 	    sourceConfig.projection   = sourceObject.getProjection();
-	    sourceConfig.name         = "bob";
 
 	    fSources.push( sourceConfig );
 
@@ -1304,6 +1289,9 @@ var ItemList = new function ( ) {
 	function recomputeData ( sourceConfig, offset ) {
 	    var projection   = sourceConfig.projection;
 	    var bufferInfo   = sourceConfig.bufferInfo;
+
+	    if ( bufferInfo === undefined )
+		return;
 
 	    var data       = bufferInfo.data;
 	    var stop       = bufferInfo.offset/projection.length;
