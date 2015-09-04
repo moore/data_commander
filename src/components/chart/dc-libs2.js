@@ -460,6 +460,7 @@ var BasePlot = new function ( ) {
 	self.doDraw       = undefined;
 	self.addData      = undefined;
 	self.getGroup     = getGroup;
+	self.resize       = resize;
 
 	return self;
 
@@ -469,6 +470,10 @@ var BasePlot = new function ( ) {
 
 	function getGroup ( ) {
 	    return fGroup;
+	}
+
+	function resize ( ) {
+
 	}
     }
 };
@@ -514,8 +519,9 @@ var ScatterPlot = new function ( ) {
 
 	d3.select(fRoot).call(fZoom);
 
-	self.doDraw       = doDraw;
-	self.addData      = addData;
+	self.doDraw   = doDraw;
+	self.addData  = addData;
+	self.resize   = resize;
 
 	return self;
 
@@ -648,11 +654,9 @@ var ScatterPlot = new function ( ) {
 	    }
 	    
 
-	    // BUG: this should be dirven by the viz
-	    resize();
-
 	    fViz.schudleDraw();
 	}
+
 
 	function resize ( ) {
     	    var elementBox = fRoot.getBoundingClientRect();
@@ -662,14 +666,6 @@ var ScatterPlot = new function ( ) {
 	    
 	    fX.range( [0, width] );
 	    fY.range( [height, 0] );
-
-	    fX.domain(
-		[ fSelectons.getMin( 'lon' ),
-		  fSelectons.getMax( 'lon' ) ] );
-
-	    fY.domain(
-		[ fSelectons.getMin( 'lat' ),
-		  fSelectons.getMax( 'lat' ) ] );
 
 	    fZoom.x(fX);
 	    fZoom.y(fY);
@@ -736,7 +732,8 @@ var BarChart = new function ( ) {
 
 	self.doDraw  = doDraw;
 	self.addData = addData;
-
+	self.resize  = resize;
+	
 	return self;
 
 	function selectionChanged ( keys ) {
@@ -882,7 +879,6 @@ var BarChart = new function ( ) {
 
 	    fZoomBox.call(fZoom);
 
-	    resize();
 	}
 
 
@@ -921,7 +917,6 @@ var BarChart = new function ( ) {
 	}
 
 	function doDraw ( ) {
-	    resize( );
 
 	    var sourceData  = [];
 	    var sourceNames = [];
@@ -1524,6 +1519,8 @@ var Viz = new function ( ) {
     function init ( fRoot, fFetcher, fCanvas, fGl, fWidth, fHeight ) {
 	var self = { };
 
+	self.resize       = resize;
+	self.ready        = ready;
 	self.addView      = addView;
 	self.addData      = addData;
 	self.setSelection = setSelection;
@@ -1535,10 +1532,24 @@ var Viz = new function ( ) {
 	var fViews         = [];
 	var fZoomGroups    = {};
 	var fSelections    = new Selections ();
+	var fReady         = false;
 
 	fSelections.addListener( schudleDraw );
 
 	return self;
+
+	function resize () {
+	    for ( var i = 0 ; i < fViews.length ; i++ ) {
+		fViews[i].resize( );
+	    }
+
+	    schudleDraw();
+	}
+
+	function ready () {
+	    resize();
+	    fReady = true;
+	}
 
 	function setSelection ( key, minValue, maxValue ) {
 	    fSelections.setSelection( key, minValue, maxValue );
@@ -1561,6 +1572,11 @@ var Viz = new function ( ) {
 		var sourceObject = fDataSources[ sourceKey ];
 
 		plot.addData( sourceObject );
+	    }
+
+	    if ( fReady === true ) {
+		prot.resize();
+		schudleDraw();
 	    }
 
 	}
@@ -1606,7 +1622,7 @@ var Viz = new function ( ) {
 	function drawGraph ( ) {
 	    fDrawSchulded = false;
 
-	    resize( fGl );
+	    resizeGl( fGl );
 
 	    fGl.clear(fGl.COLOR_BUFFER_BIT | fGl.DEPTH_BUFFER_BIT);
 
@@ -1620,7 +1636,7 @@ var Viz = new function ( ) {
 	return readStartTime(a) - readStartTime(b);
     }
 
-    function resize ( gl ) {
+    function resizeGl ( gl ) {
 	var width = gl.canvas.clientWidth;
 	var height = gl.canvas.clientHeight;
 	if (gl.canvas.width != width ||

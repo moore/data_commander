@@ -28,6 +28,15 @@ new function() {
 		.map(function (s) { return s.trim() })
 	    ;
 	    this.viz = loadMap( this, sources, this.start, this.end );
+
+	    
+	    window.addEventListener('resize', function () {
+		requestAnimationFrame( this.viz.resize );
+	    });
+	    
+
+	    
+	    requestAnimationFrame( this.viz.ready );
 	},    
     });
 
