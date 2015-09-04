@@ -765,6 +765,7 @@ var BarChart = new function ( ) {
 		fZoom.x(fX);
 	    }
 
+
 	    fY.domain([0, fMaxY]);
 	    fViz.schudleDraw();
 	}
@@ -779,13 +780,6 @@ var BarChart = new function ( ) {
 	    
 	    fWidth  = Math.max( fWidth, 0 );
 	    fHeight = Math.max( fHeight, 0 );
-
-	    var xDomain     = fX.domain();
-	    var domainDelta = xDomain[1].getTime() - xDomain[0].getTime();
-	    var days        = domainDelta/1000/DAY;
-	    var bandWidth   = fWidth/days;
-
-	    fGroup.rangeRoundBands([0, bandWidth], 0.1, 0.2);
 
 	    fX.range([0, fWidth]);
 	    fY.range([fHeight, 0]);
@@ -922,6 +916,14 @@ var BarChart = new function ( ) {
 	    var sourceNames = [];
 	    var dataKeys    = Object.keys( fD3Data );
 	    var colors      = [ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0] ];
+
+	    var xDomain     = fX.domain();
+	    var domainDelta = xDomain[1].getTime() - xDomain[0].getTime();
+	    var days        = domainDelta/1000/DAY;
+	    var bandWidth   = fWidth/days;
+
+	    fGroup.rangeRoundBands([0, bandWidth], 0.1, 0.2);
+
 
 	    for ( var i = 0 ; i < dataKeys.length ; i++ ) {
 		/*
@@ -1184,7 +1186,7 @@ var ItemList = new function ( ) {
 
 	function selectionChanged ( keys ) {
 	    if ( keys.length > 1 || keys[0] !== 'hwid' )
-		fBatcher.batch( selectionChangedWorker );
+		fBatcher.idle( 100, selectionChangedWorker );
 	}
 	
 
