@@ -494,15 +494,18 @@ var ScatterPlot = new function ( ) {
 	var fSources     = [];
 	var fSourceBuffers = [];
 	var fListeners   = [];
-	var fMinY        = undefined;
-	var fMaxY        = undefined;
-	var fMinX        = undefined;
-	var fMaxX        = undefined;
+	var fMinX        = fSelectons.getMin( 'lon' );
+	var fMaxX        = fSelectons.getMax( 'lon' );
+	var fMinY        = fSelectons.getMin( 'lat' );
+	var fMaxY        = fSelectons.getMax( 'lat' );
 	var fGlVars      = initShaders( fRoot, fGl );
 	var fZoom        = d3.behavior.zoom();
 	var fX           = d3.scale.linear();
 	var fY           = d3.scale.linear();
-	
+
+	fX.domain([fMinX, fMaxX]);
+	fY.domain([fMinY, fMaxY]);
+
         fZoom
 	    .x(fX)
 	    .y(fY)
@@ -546,8 +549,8 @@ var ScatterPlot = new function ( ) {
 		var sourceConfig = fSources[i];
 		var projection   = sourceConfig.projection;
 
-		updateKey( projection[0], results, xDomain[0], xDomain[1] );
-		updateKey( projection[1], results, yDomain[0], yDomain[1] );
+		updateKey( projection[1], results, xDomain[0], xDomain[1] );
+		updateKey( projection[2], results, yDomain[0], yDomain[1] );
 	    }
 
 
@@ -1077,10 +1080,11 @@ var BarChart = new function ( ) {
 		if ( index < offset )
 		    continue;
 
-		var lon  = data[index];
-		var lat  = data[index+1];
+		var lon  = data[index+1];
+		var lat  = data[index+2];
 		var hwid = data[index+3] | 0;
 		
+
 		if ( ( maxHwid !== 0 && minHwid !== 0 ) 
 		     && ( minHwid > hwid || maxHwid < hwid )  )
 		    continue;
@@ -1091,7 +1095,7 @@ var BarChart = new function ( ) {
 		if ( minLat > lat || maxLat < lat ) 
 		    continue;
 		
-		var day  = snapBound( data[index+2], DAY );
+		var day  = snapBound( data[index], DAY );
 		
 		if ( day < firstDay )
 		    continue;
@@ -1319,9 +1323,9 @@ var ItemList = new function ( ) {
 		if ( index < offset )
 		    continue;
 
-		var lon   = data[index];
-		var lat   = data[index+1];
-		var time  = data[index+2] * 1000;
+		var time  = data[index] * 1000;
+		var lon   = data[index+1];
+		var lat   = data[index+2];
 		var hwid  = data[index+3] | 0;
 		//var good  = data[index+4];
 		
@@ -1679,7 +1683,7 @@ function doGlDraw ( gl, glVars, fieldsCount,
     mat4.scale(matrix, matrix, translation);
     
     // Move data origan to bottom left
-    vec3.set(translation, -xMin -180, -yMin, 0);
+    vec3.set(translation, -xMin, -yMin, 0);
     mat4.translate(matrix, matrix, translation);
 
 
@@ -1727,10 +1731,10 @@ function doGlDraw ( gl, glVars, fieldsCount,
     for ( var i = 0 ; i < data.length ; i++ ) {
 	var info = data[i];
 
-	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 4 * fieldsCount, info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.selection, 2, gl.FLOAT, false, 4 * fieldsCount, info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.pointsX, 2, gl.FLOAT, false, 4 * fieldsCount, 4 + info.dataOffset * 4);
 	// BUG: even thou we will not use .yzw they could walk of the end of the buffer :(
-	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 4 * fieldsCount, 4 + info.dataOffset * 4);
-	gl.vertexAttribPointer(glVars.selection, 2, gl.FLOAT, false, 4 * fieldsCount, 8 + info.dataOffset * 4);
+	gl.vertexAttribPointer(glVars.pointsY, 2, gl.FLOAT, false, 4 * fieldsCount, 8 + info.dataOffset * 4);
 	gl.vertexAttribPointer(glVars.hwid, 2, gl.FLOAT, false, 4 * fieldsCount, 12 + info.dataOffset * 4);
 	gl.vertexAttribPointer(glVars.good, 2, gl.FLOAT, false, 4 * fieldsCount, 16 + info.dataOffset * 4);
 

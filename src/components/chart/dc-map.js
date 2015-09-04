@@ -48,6 +48,7 @@ new function() {
 	viz.setSelection( 'lon' , -180, 180 );
 	viz.setSelection( 'lat' , -90, 90 );
 	viz.setSelection( 'time', startTime , endTime );
+	viz.setSelection( 'hwid', 0 , 0 );
 
 	var plot1Data = [];
 	var plot2Data = [];
@@ -57,7 +58,7 @@ new function() {
 
 	    var sourceKey = viz.addData( sources[i],  typeName, 
 					 startTime, endTime, 
-					 ['lon', 'lat', 'time', 'hwid', 'good'],
+					 ['time', 'lon', 'lat', 'hwid', 'good'],
 					 {
 					     xRange : [-180, 180],
 					     yRange : [-90 , 90 ],
