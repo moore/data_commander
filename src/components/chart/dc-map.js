@@ -27,16 +27,17 @@ new function() {
 		.split(',')
 		.map(function (s) { return s.trim() })
 	    ;
-	    this.viz = loadMap( this, sources, this.start, this.end );
+	    var viz = loadMap( this, sources, this.start, this.end );
+	    this.viz = viz
 
 	    
 	    window.addEventListener('resize', function () {
-		requestAnimationFrame( this.viz.resize );
+		requestAnimationFrame( viz.resize );
 	    });
 	    
 
 	    
-	    requestAnimationFrame( this.viz.ready );
+	    requestAnimationFrame( viz.ready );
 	},    
     });
 
