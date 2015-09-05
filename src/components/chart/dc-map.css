@@ -7,6 +7,11 @@ path {
 
 #container {
     overflow : hidden;
+    background-color : black ;
+    overflow         : hidden ;
+    float            : left;
+    position         : relative;
+    width            : 100%;
 }
 
 body {
@@ -42,19 +47,13 @@ body {
     border    : 1px solid blue;
 }
 
-.gl-view {
-    background-color : black ;
-    overflow         : hidden ;
-    float            : left;
-    position         : relative;
-
+#title {
+   color : white;
 }
 
 #sat {
     transform : translateZ(0);
     overflow  : hidden;
-    clear     : both;
-    width     : 600px;
 }
 
 .item {

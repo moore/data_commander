@@ -10,14 +10,11 @@
 <dom-module id="dc-map">
   <template>
     <link rel="stylesheet" href="dc-map.css">
-    <p>
-      This is pics of type "<span>{{source}}</span>".
       <div id="container" style="position:relative">
-	<div class="gl-view" width="1200" height="700">
-	  <canvas class="gl-view" id="chart" width="1200" height="700"  style="transform: translateZ(0)">
-	  </canvas>
-	  <div id="plot1">
-	    <script id="fragment-shader" type="x-shader/x-fragment">
+	<canvas class="gl-view" id="chart" width="1200" height="700"  style="transform: translateZ(0)">
+	</canvas>
+	<div id="plot1">
+	  <script id="fragment-shader" type="x-shader/x-fragment">
       precision highp float;
       varying float ignorPoint;
       varying float vGood;
@@ -44,8 +41,8 @@
         else
            gl_FragColor = vec4(color, 0.5);
       }
-	    </script>
-	    <script id="vertex-shader" type="x-shader/x-vertex">
+	  </script>
+	  <script id="vertex-shader" type="x-shader/x-vertex">
       precision highp float;
       attribute vec2 aVertexPositionX;
       attribute vec2 aVertexPositionY;
@@ -115,21 +112,23 @@
         }
 
       }
-			       </script>
-	    <svg width="600" height="300" class="sub-graph" id="map-plot">
-	    </svg>
-	  </div>
-	  <div id="plot2">
-	    <div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
-	    <svg width="600" height="300" class="sub-graph" id="bar-chart">
-	    </svg>
-	  </div>
+	  </script>
+	  <svg width="1200" height="600" class="sub-graph" id="map-plot">
+	  </svg>
+	</div>
 
-	  <div id="sat">
-	    <ul class="item-list">
-	    </ul>
-	  </div>
+	<div id="title">
+	  This is pics of type "<span>{{source}}</span>".
+	</div>
+	<div id="sat">
+	  <ul class="item-list">
+	  </ul>
+	</div>
 
+	<div id="plot2">
+	  <div id="zoom-chooser">Zoom Y:<input type="checkbox" id="zoom-y"></div>
+	  <svg width="1200" height="200" class="sub-graph" id="bar-chart">
+	  </svg>
 	</div>
       </div>
   </template>

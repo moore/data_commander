@@ -539,7 +539,7 @@ var ScatterPlot = new function ( ) {
 		range.min = minVal;
 
 	    if ( maxVal !== undefined && 
-		 (range.max === undefined || range.max > maxVal ) )
+		 (range.max === undefined || range.max < maxVal ) )
 		range.max = maxVal;
 	}
 
@@ -1666,30 +1666,32 @@ function doGlDraw ( gl, glVars, fieldsCount,
     var perspectiveMatrix = mat4.create();
 
     // Set up the canvas units to be in pixles and
-    // move the origan to the top left.
+    // move the origan to the top left?
     mat4.ortho(perspectiveMatrix, 0, glWidth, 0, glHeight, 0.1, 100.0 );
-    vec3.set(translation, glWidth/2, glHeight, 0);
+    vec3.set(translation, 0, glHeight, 0);
     mat4.translate(perspectiveMatrix, perspectiveMatrix, translation);
 
     var matrix = mat4.create();
     mat4.identity(matrix);
     
     // BUG: I don't understand the need for the -10 z translation
-    //vec3.set(translation, left -width, -top, -10 );
-    vec3.set(translation, left - width, -top - height, -10 );
+    // Move the origen to the middle of the plot rect
+    vec3.set(translation, left + width/2, -top - height/2, -10 );
     mat4.translate(matrix, matrix, translation);
 
+    // Compute pixles per deg
     var xScale = width/(xMax - xMin);
     var yScale = height/(yMax - yMin);
 
+    // Set point size to between 2 px and 0.05 degres wide.
     var pointSize = Math.max( 2, 0.05 * xScale );
 
     // Scale from base units to pixles
     vec3.set(translation, xScale, yScale, 1);
     mat4.scale(matrix, matrix, translation);
     
-    // Move data origan to bottom left
-    vec3.set(translation, -xMin, -yMin, 0);
+    // Move origan to the center of the selection
+    vec3.set(translation, -(xMin + (xMax - xMin)/2), -(yMin + ( yMax - yMin )/2), 0);
     mat4.translate(matrix, matrix, translation);
 
 
