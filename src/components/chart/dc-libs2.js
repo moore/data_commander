@@ -800,10 +800,17 @@ var BarChart = new function ( ) {
 		.attr("height", fHeight )
 	    ;
 
+
 	    fChart.select(".x-axis")
 		.attr("transform", "translate(0," + fHeight + ")")
 		.call(fXAxis)
 	    ;
+
+	    // Comput number of ticks so that we
+	    // have enought space for lables.
+	    // BUG: we should replace 20 with something
+	    // derived from the current font height.
+	    fYAxis.ticks( Math.floor(fHeight/20) )
 
 	    fChart.select(".y-axis")
 		.call(fYAxis)
@@ -816,12 +823,14 @@ var BarChart = new function ( ) {
 
 	    fXAxis = d3.svg.axis()
 		.scale(fX)
-		.orient("bottom");
+		.orient("bottom")
+	    ;
 
 	    fYAxis = d3.svg.axis()
 		.scale(fY)
 		.orient("left")
-		.tickFormat(d3.format(".2s"));
+		.tickFormat(d3.format(".2s"))
+	    ;
 
 
 	    fChart = d3.select(fRoot).select("#bar-chart")
