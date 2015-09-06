@@ -1,5 +1,50 @@
 "use strict";
 
+var Range = new function () {
+    return factory;
+
+    function factory ( ) {
+	var fMin = 0;
+	var fMax = 0;
+	
+	if ( arguments.length === 1 ) {
+	    var parts = arguments[0].split(':');
+	    fMin = new Number ( parts[0] );
+	    fMax = new Number ( parts[1] );
+	}
+
+	else if ( arguments.length >= 2 ) {
+	    fMin = new Number ( arguments[0] );
+	    fMax = new Number ( arguments[1] );
+	}
+
+	return constructor( fMin, fMax );
+    }
+
+    function constructor ( fMin, fMax ) {
+	var self = {};
+
+	self.getMin   = getMin;
+	self.getMax   = getMax;
+	self.setRange = setRange;
+
+	return self;
+
+	function getMin ( ) {
+	    return fMin;
+	}
+
+	function getMax ( ) {
+	    return fMax;
+	}
+
+	function setRange ( newMin, newMax ) {
+	    fMin = newMin;
+	    fMax = newMax;
+	}
+    }
+};
+
 new function() {
     var BUCKET_SIZE = 24 * 60 * 60 * 1000;
     var requestedTimes = {};
@@ -20,14 +65,22 @@ new function() {
 		type : Date,
 		value: new Date()
 	    },
+	    lat: {
+		type :  Range,
+		value: new Range ( -90, 90 ),
+	    },
+	    lon: {
+		type :  Range,
+		value: new Range ( -180, 180 ),
+	    },
+	    hwid: {
+		type : Number,
+		value: 0,
+	    },
 	},
 	// add a callback to the element's prototype
 	ready: function() {
-	    var sources = this.source
-		.split(',')
-		.map(function (s) { return s.trim() })
-	    ;
-	    var viz = loadMap( this, sources, this.start, this.end );
+	    var viz = loadMap( this );
 	    this.viz = viz
 
 	    
@@ -42,23 +95,40 @@ new function() {
     });
 
 
-    function loadMap ( root, sources, startDate, endDate ) {
+    function loadMap ( root ) {
 
 	var typeName = "scene";
 
+	var sources = root.source
+	    .split(',')
+	    .map(function (s) { return s.trim() })
+	;
 
-	var startTime = startDate.getTime();
-	var endTime   = endDate.getTime();
-
+	var startTime = root.start.getTime();
+	var endTime   = root.end.getTime();
 
 	var fetcher = new DataFetcher ( );
 
 	var viz = Viz( root, fetcher );
 
-	viz.setSelection( 'lon' , -180, 180 );
-	viz.setSelection( 'lat' , -90, 90 );
-	viz.setSelection( 'time', startTime , endTime );
-	viz.setSelection( 'hwid', 0 , 0 );
+	viz.setSelection( 'time',
+			  startTime, 
+			  endTime );
+
+	viz.setSelection( 'lon', 
+			  root.lon.getMin(),
+			  root.lon.getMax() );
+
+	viz.setSelection( 'lat',
+			  root.lat.getMin(),
+			  root.lat.getMax() );
+
+	viz.setSelection( 'hwid',
+			  root.hwid,
+			  root.hwid );
+
+	
+	viz.addSelectionListner( selectionChanged );
 
 	var plot1Data = [];
 	var plot2Data = [];
@@ -117,6 +187,10 @@ new function() {
 	
 	return viz;
 
+    }
+
+    function selectionChanged ( keys ) {
+	
     }
 
 }

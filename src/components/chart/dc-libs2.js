@@ -1537,6 +1537,10 @@ var Viz = new function ( ) {
 	self.setSelection = setSelection;
 	self.schudleDraw  = schudleDraw;
 
+	self.getSelectionMax     = getSelectionMax;
+	self.getSelectionMin     = getSelectionMin;
+	self.addSelectionListner = addSelectionListner;
+
 	var fSourceKeys    = [];
 	var fDataSources   = {};
 	var fDrawSchulded  = false;
@@ -1548,6 +1552,10 @@ var Viz = new function ( ) {
 	fSelections.addListener( schudleDraw );
 
 	return self;
+
+	function addSelectionListner ( callback, args ) {
+	    return fSelections.addListener( callback, args );
+	}
 
 	function resize () {
 	    for ( var i = 0 ; i < fViews.length ; i++ ) {
@@ -1565,6 +1573,15 @@ var Viz = new function ( ) {
 	function setSelection ( key, minValue, maxValue ) {
 	    fSelections.setSelection( key, minValue, maxValue );
 	}
+
+	function getSelectionMax ( key ) {
+	    return fSelections.getMax( key );
+	}
+
+	function getSelectionMin ( key ) {
+	    return fSelections.getMin( key );
+	}
+
 
 	function addView ( Type, selector, sources, options ) {
 
