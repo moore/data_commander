@@ -11,14 +11,14 @@ CERTS_DIR = certs
 BUILD_JS_DIR  = ${BUILD_DIR}/js
 BUILD_BIN_DIR = ${BUILD_DIR}/bin
 
-CGO_CFLAGS = "-I/home/moore/devel/planet/convexstruct/src/c/ -I/home/moore/devel/planet/data-commander/build/message_headders/ -std=gnu99 "
+CGO_CFLAGS = "-Ilibs/c/ -Ibuild/message_headders/ -std=gnu99 "
 
 MESSAGE_HEADDERS_DIR = ${BUILD_DIR}/message_headders
 MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s TOTAL_MEMORY=104857600  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=gnu99 -I${MESSAGE_HEADDERS_DIR} -I/home/moore/devel/planet/convexstruct/src/c/
+EMFLAGS =  -s TOTAL_MEMORY=104857600  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=gnu99 -Isrc/c/ -Ilibs/c/
 
 .PHONY: all clean distclean 
 all:: js
@@ -28,7 +28,7 @@ ${BUILD_JS_DIR}:
 
 messages : ${MESSAGE_HEADDERS}
 
-js: ${BUILD_JS_DIR} ${MESSAGE_HEADDERS} $(SOURCES)
+js: ${BUILD_JS_DIR}  $(SOURCES)
 	$(EMCC) -Os $(EMFLAGS) $(SOURCES) -o ${BUILD_JS_DIR}/dc.js
 
 ${HTDOCS}: js
@@ -51,6 +51,7 @@ ${MESSAGE_HEADDERS_DIR}:
 ${MESSAGE_HEADDERS} : ${MESSAGE_HEADDERS_DIR} ${MESSAGE_JSON}
 	messagebuilder c ${MESSAGE_JSON} | cat -s > ${MESSAGE_HEADDERS}
 	astyle --delete-empty-lines --break-blocks --break-closing-brackets ${MESSAGE_HEADDERS}
+	cp ${MESSAGE_HEADDERS} src/c/
 
 ${BUILD_BIN_DIR}:
 	mkdir -p ${BUILD_BIN_DIR}
