@@ -1,5 +1,5 @@
 EMCC = emcc
-SOURCES = src/c/dc.cpp
+SOURCES = src/c/dc.c
 POST_JS = src/js/post.js
 COMPONENTS_SRC = src/components
 
@@ -11,14 +11,14 @@ CERTS_DIR = certs
 BUILD_JS_DIR  = ${BUILD_DIR}/js
 BUILD_BIN_DIR = ${BUILD_DIR}/bin
 
-
+CGO_CFLAGS = "-I/home/moore/devel/planet/convexstruct/src/c/ -I/home/moore/devel/planet/data-commander/build/message_headders/ -std=gnu99 "
 
 MESSAGE_HEADDERS_DIR = ${BUILD_DIR}/message_headders
 MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h
 
 MESSAGE_JSON = src/convexstruct/dc.json
 
-EMFLAGS =  -s TOTAL_MEMORY=104857600  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=c++11 -I${MESSAGE_HEADDERS_DIR}
+EMFLAGS =  -s TOTAL_MEMORY=104857600  -s EXPORTED_FUNCTIONS="[ '_readIndexStart', '_readValue', '_hasMore', '_initIterator', '_nextValue', '_finishIterator', '_getName', '_getNameLength', '_getUnits', '_getUnitsLength', '_getColumCount', '_readColumnMin', '_readColumnMax', '_readEntriesCount']" --post-js $(POST_JS) -std=gnu99 -I${MESSAGE_HEADDERS_DIR} -I/home/moore/devel/planet/convexstruct/src/c/
 
 .PHONY: all clean distclean 
 all:: js
@@ -59,9 +59,9 @@ server : ${HTDOCS}
 	nghttpd -n 4 --htdocs=${HTDOCS}/ 8000 ${CERTS_DIR}/server.key ${CERTS_DIR}/server.crt
 
 buildtile: ${BUILD_BIN_DIR} ${MESSAGE_HEADDERS}
-	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtile src/go/planet.com/dc/build_tile.go
-	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildregisters src/go/planet.com/dc/build_register_tile.go
-	CGO_CFLAGS="-I/home/moore/devel/planet/data-commander/build/message_headders/ -std=c99" go build -o ${BUILD_BIN_DIR}/buildtables src/go/planet.com/dc/build_table_tile.go
+	#CGO_CFLAGS=${CGO_CFLAGS} go build -o ${BUILD_BIN_DIR}/buildtile src/go/planet.com/dc/build_tile.go
+	CGO_CFLAGS=${CGO_CFLAGS} go build -o ${BUILD_BIN_DIR}/buildregisters src/go/planet.com/dc/build_register_tile.go
+	CGO_CFLAGS=${CGO_CFLAGS} go build -o ${BUILD_BIN_DIR}/buildtables src/go/planet.com/dc/build_table_tile.go
 
 ${CERTS_DIR}:
 	mkdir -p ${CERTS_DIR}

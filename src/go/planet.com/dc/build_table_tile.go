@@ -33,6 +33,19 @@ func (a ByTimestamp) Len() int           { return len(a) }
 func (a ByTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByTimestamp) Less(i, j int) bool { return a[i].Timestamp < a[j].Timestamp }
 
+type BySatTimestamp []Scene
+
+func (a BySatTimestamp) Len() int           { return len(a) }
+func (a BySatTimestamp) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a BySatTimestamp) Less(i, j int) bool {
+	if a[i].Satellite == a[j].Satellite {
+		return a[i].Timestamp < a[j].Timestamp 
+	} else {
+		return a[i].Satellite < a[j].Satellite 
+	}
+}
+
+
 func parseFile ( dataFile string ) ([]Scene, error) {
 	csvfile, err := os.Open(dataFile)
 	
@@ -78,7 +91,30 @@ func parseFile ( dataFile string ) ([]Scene, error) {
 	return scenes, nil
 }
 
+func partationTiles ( scenes []Scene ) ( [][]Scene )  {
 
+	var result [][]Scene
+
+	var BucketSize      uint64 = 24 * 60 * 60 * 1000
+	var currnetTileTime uint64 = 0
+	var currentStart    int    = 0
+
+	for i, record := range scenes {
+		tileTime := (record.Timestamp / BucketSize) * BucketSize 
+			
+		if currnetTileTime == 0 {
+			currnetTileTime = tileTime
+		} else if currnetTileTime != tileTime {
+			result = append( result, scenes[currentStart:i] )
+			currentStart = i
+			currnetTileTime = tileTime
+		}	
+	}
+
+	result = append( result, scenes[currentStart:] )
+
+	return result
+}
 
 func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 	sort.Sort(ByTimestamp(scenes))
@@ -88,61 +124,56 @@ func writeTiles ( scenes []Scene, prefix string ) ( error )  {
 		scenes[len(scenes)-1].Timestamp - scenes[0].Timestamp,
 		scenes[len(scenes)-1].Timestamp, scenes[0].Timestamp)
 
-
 	var BucketSize uint64 = 24 * 60 * 60 * 1000
 
-	times  := make([]int64, len(scenes))
-	sats   := make([]int64, len(scenes))
-	lats   := make([]int64, len(scenes))
-	lons   := make([]int64, len(scenes))
-	good   := make([]int64, len(scenes))
+	partitions := partationTiles( scenes )
 
-	var currnetTileTime uint64  = 0
-	var cussrntStart    int     = 0
-	var lastTime        int64   = 0
-	var lastSat         int64   = 0
-	var lastLat         float64 = 0
-	var lastLon         float64 = 0
-	var lastGood        int64   = 0
+	fmt.Fprintf(os.Stdout, "fround %v partitions\n", 
+		len(partitions) )
+	
 
-	for i, record := range scenes {
-		tileTime := (record.Timestamp / BucketSize) * BucketSize 
+	for _, partition := range partitions {
+		sort.Sort(BySatTimestamp(partition))
+
+		times  := make([]int64, len(partition))
+		sats   := make([]int64, len(partition))
+		lats   := make([]int64, len(partition))
+		lons   := make([]int64, len(partition))
+		good   := make([]int64, len(partition))
+
+		var currnetTileTime uint64  = 0
+		var lastTime        int64   = 0
+		var lastSat         int64   = 0
+		var lastLat         float64 = 0
+		var lastLon         float64 = 0
+		var lastGood        int64   = 0
+
+		for i, record := range partition {
+			tileTime := (record.Timestamp / BucketSize) * BucketSize 
 			
-		if currnetTileTime == 0 {
-			currnetTileTime = tileTime
-		} else if currnetTileTime != tileTime {
-			tile, _ := makeTile( times[cussrntStart:i], sats[cussrntStart:i], lats[cussrntStart:i], lons[cussrntStart:i], good[cussrntStart:i] )
-			cussrntStart = i
+			if currnetTileTime == 0 {
+				currnetTileTime = tileTime
+			} 
 
-			path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
+			times[i] = int64(record.Timestamp) - lastTime 
+			sats[i]  = int64(record.Satellite) - lastSat
+			lats[i]  = (int64)((record.Lat - lastLat) * math.Pow(10, 6))
+			lons[i]  = (int64)((record.Lon - lastLon) * math.Pow(10, 6))
+			good[i]  = int64(record.Good) - lastGood
 
-			writeTile( tile, path )
-			lastTime  = 0
-			lastLat   = 0
-			lastLon   = 0
-			lastSat   = 0
-			lastGood  = 0
-			currnetTileTime = tileTime
+			lastTime = int64(record.Timestamp)
+			lastSat  = int64(record.Satellite)
+			lastLat  = record.Lat
+			lastLon  = record.Lon
+			lastGood = int64(record.Good)
 		}
 
-		times[i] = int64(record.Timestamp) - lastTime 
-		sats[i]  = int64(record.Satellite) - lastSat
-		lats[i]  = (int64)((record.Lat - lastLat) * math.Pow(10, 6))
-		lons[i]  = (int64)((record.Lon - lastLon) * math.Pow(10, 6))
-		good[i]  = int64(record.Good) - lastGood
+		tile, _ := makeTile( times, sats, lats, lons, good )
+		path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
 
-		lastTime = int64(record.Timestamp)
-		lastSat  = int64(record.Satellite)
-		lastLat  = record.Lat
-		lastLon  = record.Lon
-		lastGood = int64(record.Good)
+		writeTile( tile, path )
+
 	}
-
-	tile, _ := makeTile( times[cussrntStart:], sats[cussrntStart:], lats[cussrntStart:], lons[cussrntStart:], good[cussrntStart:] )
-	path := prefix  + ":" + strconv.FormatUint(currnetTileTime, 10) + ".tile"
-
-	writeTile( tile, path )
-
 
 	return nil
 }
@@ -172,6 +203,17 @@ func buildColumn ( name string, units string, values []int64, valueFactor int8) 
 		}
 	}
 
+	values_vec_length := len(values) * 8
+	values_vec := make([]uint8, values_vec_length )
+
+	// BUG: check error code
+	result := C.write_varint64_vector( 
+		(*C.int64_t)(unsafe.Pointer(&values[0])),
+		C.uint32_t(len(values)),
+		(*C.varIntVec_t)(unsafe.Pointer(&values_vec[0])),
+		0, 
+		C.size_t(values_vec_length) )
+
 	builder.prebuilt = false
 
 	builder.name.data    = C.CString(name)
@@ -182,8 +224,8 @@ func buildColumn ( name string, units string, values []int64, valueFactor int8) 
 	builder.valueFactor  = C.int8_t(valueFactor)
 	builder.min          = C.int64_t(min)
 	builder.max          = C.int64_t(max)
-	builder.values.data  = (*C.int64_t)(unsafe.Pointer(&values[0]))
-	builder.values.count = C.size_t(len(values))
+	builder.values.data  = (*C.varIntVec_t)(unsafe.Pointer(&values_vec[0]))
+	builder.values.length = C.size_t(result.worte)
 
 	return builder
 }
