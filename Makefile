@@ -11,7 +11,7 @@ CERTS_DIR = certs
 BUILD_JS_DIR  = ${BUILD_DIR}/js
 BUILD_BIN_DIR = ${BUILD_DIR}/bin
 
-CGO_CFLAGS = "-Ilibs/c/ -Ibuild/message_headders/ -std=gnu99 "
+CGO_CFLAGS = "-I/home/moore/devel/planet/data-commander/libs/c/ -I/home/moore/devel/planet/data-commander/build/message_headders/ -std=gnu99 "
 
 MESSAGE_HEADDERS_DIR = ${BUILD_DIR}/message_headders
 MESSAGE_HEADDERS     = ${MESSAGE_HEADDERS_DIR}/data_tile.h

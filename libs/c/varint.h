@@ -234,4 +234,22 @@ write_varint64_vector ( int64_t *data, uint32_t count, varIntVec_t *buffer,
   return (write_varint64_vector_result)
     { i, (size_t)current_offset - buffer_offset };
 }
+
+
+size_t
+compute_varint64_vector_length ( int64_t *data, uint32_t count ) {
+  uint32_t i = 0;
+  size_t   length = 0;
+  uint8_t  buffer[9];
+
+  length += encodeInt64( (int64_t)count, buffer,
+			      0, sizeof(buffer));
+
+  for ( i = 0 ; i < count ; i++ ) {
+    length +=encodeInt64( data[i], (uint8_t*)buffer,
+				  0, sizeof(buffer) );
+  }
+
+  return length;
+}
 #endif /* VARINT_IMPLMENTATION_H  */

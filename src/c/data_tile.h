@@ -87,8 +87,8 @@ struct Column_builder {
         size_t length ;
     } units ;
     struct Column_type_values {
-        varIntVec_t* data ;
-        size_t length ;
+        int64_t *data ;
+        size_t count ;
     } values ;
 
 } ;
@@ -143,15 +143,33 @@ static inline size_t build_TableTile ( char* data, size_t length, struct TableTi
 
 size_t static inline compute_TableTile_length ( struct TableTile_builder* builder ) ;
 
+size_t static inline TableTile_length ( TableTile* data ) ;
+
 static inline size_t build_Column ( char* data, size_t length, struct Column_builder* builder_data ) ;
 
 size_t static inline compute_Column_length ( struct Column_builder* builder ) ;
+
+size_t static inline Column_length ( Column* data ) ;
 
 static inline size_t build_DataTile ( char* data, size_t length, struct DataTile_builder* builder_data ) ;
 
 size_t static inline compute_DataTile_length ( struct DataTile_builder* builder ) ;
 
+size_t static inline DataTile_length ( DataTile* data ) ;
+
 /** type TableTile **/
+
+static inline TableTile* TableTile_safe_cast ( const char* data, size_t max_length ) {
+    if ( max_length < 4 )
+        return NULL;
+
+    size_t read_length = TableTile_length( (TableTile*)data ) ;
+
+    if ( read_length > max_length )
+        return NULL;
+
+    return (TableTile*)data ;
+}
 
 size_t static inline TableTile_length ( TableTile* data ) {
     return (size_t)((uint32_t*)data)[ 0 ] ;
@@ -465,6 +483,18 @@ static inline size_t build_TableTile ( char* data, size_t length, struct TableTi
 
 /** type Column **/
 
+static inline Column* Column_safe_cast ( const char* data, size_t max_length ) {
+    if ( max_length < 4 )
+        return NULL;
+
+    size_t read_length = Column_length( (Column*)data ) ;
+
+    if ( read_length > max_length )
+        return NULL;
+
+    return (Column*)data ;
+}
+
 size_t static inline Column_length ( Column* data ) {
     return (size_t)((uint32_t*)data)[ 0 ] ;
 }
@@ -483,7 +513,9 @@ size_t static inline compute_Column_length ( struct Column_builder* builder ) {
     size_t length = 37 ;
     length += builder->name.length ;
     length += builder->units.length ;
-    length += builder->values.length ;
+    length += compute_varint64_vector_length(
+                  builder->values.data,
+                  builder->values.count );
     return length;
 }
 
@@ -830,17 +862,37 @@ static inline size_t build_Column ( char* data, size_t length, struct Column_bui
     memcpy( data + current_offset, (const char*)builder_data->units.data, builder_data->units.length ) ;
     current_offset += builder_data->units.length ;
     (*(uint32_t*)(data + 4)) = current_offset ;
+    write_varint64_vector_result varInt_result =
+        write_varint64_vector( builder_data->values.data,
+                               builder_data->values.count,
+                               (varIntVec_t*)data,
+                               current_offset, length );
 
-    if ( length < current_offset + builder_data->values.length )
+    if ( varInt_result.count != builder_data->values.count )
         return 0 ;
 
-    memcpy( data + current_offset, (const char*)builder_data->values.data, builder_data->values.length ) ;
-    current_offset += builder_data->values.length ;
+    current_offset += varInt_result.worte ;
+
+    if ( length < current_offset )
+        return 0;
+
     (*(uint32_t*)(data + 0)) = current_offset ;
     return current_offset;
 }
 
 /** type DataTile **/
+
+static inline DataTile* DataTile_safe_cast ( const char* data, size_t max_length ) {
+    if ( max_length < 4 )
+        return NULL;
+
+    size_t read_length = DataTile_length( (DataTile*)data ) ;
+
+    if ( read_length > max_length )
+        return NULL;
+
+    return (DataTile*)data ;
+}
 
 size_t static inline DataTile_length ( DataTile* data ) {
     return (size_t)((uint32_t*)data)[ 0 ] ;

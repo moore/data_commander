@@ -14,7 +14,7 @@ import (
 /*
 #include <stdlib.h>
 #include <stdint.h>
-#include <data_tile.h>
+#include "data_tile.h"
 */
 import "C"
 import "unsafe"
@@ -141,17 +141,6 @@ func buildColumn ( name string, units string, values []int64, valueFactor int8) 
 	}
 
 
-	values_vec_length := len(values) * 8
-	values_vec := make([]uint8, values_vec_length )
-
-	// BUG: check error code
-	result := C.write_varint64_vector( 
-		(*C.int64_t)(unsafe.Pointer(&values[0])),
-		C.uint32_t(len(values)),
-		(*C.varIntVec_t)(unsafe.Pointer(&values_vec[0])),
-		0, 
-		C.size_t(values_vec_length) )
-
 	builder.prebuilt = false
 
 	builder.name.data    = C.CString(name)
@@ -162,9 +151,8 @@ func buildColumn ( name string, units string, values []int64, valueFactor int8) 
 	builder.valueFactor  = C.int8_t(valueFactor)
 	builder.min          = C.int64_t(min)
 	builder.max          = C.int64_t(max)
-	builder.values.data  = (*C.varIntVec_t)(unsafe.Pointer(&values_vec[0]))
-	builder.values.length = C.size_t(result.worte)
-
+	builder.values.data  = (*C.int64_t)(unsafe.Pointer(&values[0]))
+	builder.values.count = C.size_t(len(values))
 
 	return builder
 }
